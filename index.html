@@ -145,9 +145,15 @@ details.how[open] summary::after{transform:rotate(-135deg) translateY(-1px)}
 body.offline .fab{display:none}
 
 /* sheets */
-.scrim{position:fixed;inset:0;background:var(--scrim);z-index:20;display:flex;align-items:flex-end;justify-content:center}
-.sheet{background:var(--surface);width:100%;max-width:560px;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;
-  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px}
+/* 卡片：上方永遠留一段背景可點關閉；高度用實際可見高度（dvh），避開 Safari 的狀態列與網址列 */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:20;display:flex;align-items:flex-end;justify-content:center;
+  padding-top:calc(env(safe-area-inset-top,0px) + 56px)}
+.sheet{background:var(--surface);width:100%;max-width:560px;overflow:auto;overscroll-behavior:contain;border-radius:18px 18px 0 0;
+  max-height:calc(100vh - env(safe-area-inset-top,0px) - 56px);max-height:calc(100dvh - env(safe-area-inset-top,0px) - 56px);
+  padding:0 max(16px,env(safe-area-inset-right,0px)) calc(32px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px}
+.sheet-bar{position:sticky;top:0;z-index:3;background:var(--surface);display:flex;justify-content:center;align-items:center;padding:8px 0 2px;margin-bottom:-8px;min-height:40px}
+.sheet-bar .grab{width:40px;height:5px;border-radius:3px;background:var(--line)}
+.sheet-bar .sheet-x{position:absolute;right:0;top:6px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-size:16px;line-height:1;display:grid;place-items:center;padding:0}
 .sheet h2{margin:0;font-size:19px;text-wrap:balance}
 .sheet .sub{font-size:13px;color:var(--muted);margin-top:-10px}
 .btn{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:8px 14px;font-size:14px;color:var(--ink)}
@@ -523,7 +529,7 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
   const root=document.getElementById('sheetRoot');
   function openSheet(html,label,keep){
     const prev=root.querySelector('.sheet'), top=prev?prev.scrollTop:0;
-    root.innerHTML=`<div class="scrim" data-act="close-scrim"><div class="sheet ${keep?'noanim':''}" role="dialog" aria-modal="true" aria-label="${esc(label||'')}">${html}</div></div>`;
+    root.innerHTML=`<div class="scrim" data-act="close-scrim"><div class="sheet ${keep?'noanim':''}" role="dialog" aria-modal="true" aria-label="${esc(label||'')}"><div class="sheet-bar"><span class="grab" aria-hidden="true"></span><button class="sheet-x" data-act="close" aria-label="關閉">✕</button></div>${html}</div></div>`;
     if(keep)root.querySelector('.sheet').scrollTop=top;
   }
   function closeSheet(){root.innerHTML='';}
