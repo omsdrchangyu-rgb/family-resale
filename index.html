@@ -1,0 +1,1216 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light only">
+<title>家庭二手庫</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#EBF0F3">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="二手庫">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<script src="config.js"></script>
+<style>
+/* Layout: phone column. Header + category rail → summary (預計出售／總價值 big number, 怎麼算, 家人篩選) → status tiers → item cards.
+   Palette: 峽灣藍 — Nordic cool grey-blue paper, deep fjord-teal ink, tomato-red price tag for anything with a price on it.
+   Single light theme on purpose (院長指定不跟系統深色切換).
+   Status colors: 持有 slate / 考慮 ochre / 上架 tomato (= tag) / 已售 teal (= accent). */
+:root{
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+  --bg:#EBF0F3; --surface:#FFFFFF; --surface-2:#F4F7F9; --ink:#14232E; --muted:#586A76; --line:#D3DDE3;
+  --accent:#1E5F74; --accent-ink:#FFFFFF; --accent-soft:#DAEAF0;
+  --tag:#C63D30; --tag-ink:#FFFFFF; --tag-soft:#FBE3DF; --wash:#EDF3F6;
+  --s-keep:#586A76; --s-con:#8E6409; --s-list:#B8362A; --s-sold:#1E5F74; --warn:#B95412;
+  --scrim:rgba(14,26,34,.5);
+  --font-body:"Noto Sans TC",-apple-system,"PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --r:14px;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 96px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+img{max-width:100%} [hidden]{display:none!important}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.label{font-size:12px;letter-spacing:.08em;color:var(--muted);margin:0}
+svg.i{width:16px;height:16px;flex:0 0 auto}
+
+/* header */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;display:flex;flex-direction:column;gap:10px;
+  margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:560px;margin:0 auto;width:100%}
+.brand h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.02em}
+.brand .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
+.pill{font-size:12px;padding:3px 10px;border-radius:99px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;border:0}
+button.pill{cursor:pointer}
+body.offline .pill{background:var(--tag-soft);color:var(--ink)}
+.mini{border:1px solid var(--line);background:var(--surface);border-radius:99px;height:34px;padding:0 12px;font-size:13px;display:inline-flex;align-items:center;gap:5px;color:var(--ink)}
+.mini svg{width:15px;height:15px}
+/* 類別與家人篩選：一列平分寬度，不左右滑動；項目變多時每格自動變窄 */
+.rail,.who{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:5px}
+.rail{max-width:560px;margin:0 auto;width:100%}
+.rail button,.who button{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;border:1px solid var(--line);background:var(--surface)}
+.rail button{border-radius:10px;padding:7px 2px;font-weight:700;font-size:14px}
+.rail button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.offline-banner{display:none;max-width:560px;margin:0 auto;width:100%;font-size:13px;padding:8px 12px;border-radius:10px;background:var(--tag-soft);border:1px solid color-mix(in srgb,var(--tag) 45%,transparent)}
+body.offline .offline-banner{display:block}
+
+/* summary */
+.sum{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
+.sum-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.vseg{display:inline-flex;border:1px solid var(--line);border-radius:99px;padding:2px;background:var(--surface-2);gap:2px}
+.vseg button{border:0;background:none;border-radius:99px;padding:4px 12px;font-size:13px;font-weight:700;color:var(--muted)}
+.vseg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.sum-label,.big-cap{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.big-cap{margin-top:-6px}
+details.how{border-top:1px dashed var(--line);padding-top:8px}
+details.how summary{font-size:13px;color:var(--muted);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:4px;min-height:28px}
+details.how summary::-webkit-details-marker{display:none}
+details.how summary::after{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg) translateY(-2px);margin-left:4px}
+details.how[open] summary::after{transform:rotate(-135deg) translateY(-1px)}
+.how-in{display:flex;flex-direction:column;gap:5px;padding:6px 0 2px;font-size:13px}
+.how-in .how-what{margin:0 0 4px;color:var(--muted)}
+.how-in .row{display:flex;justify-content:space-between;gap:12px}
+.how-in .row span:last-child{font-family:var(--font-num);font-weight:600;white-space:nowrap}
+.tiers.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rail button.wish{border-style:dashed}
+.rail button.wish.on{border-style:solid}
+.prio{font-size:12px;font-weight:700;padding:0 7px;border-radius:6px;line-height:1.7}
+.prio.p1{background:var(--tag-soft);color:var(--s-list)} .prio.p2{background:var(--accent-soft);color:var(--accent)} .prio.p3{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.linkbox{display:flex;gap:8px;align-items:center;min-width:0}
+.linkbox a{color:var(--accent);overflow-wrap:anywhere;font-size:14px}
+.big{font-family:var(--font-num);font-size:44px;line-height:1;font-weight:600;letter-spacing:-.02em;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.big small{font-family:var(--font-body);font-size:15px;font-weight:500;color:var(--muted);letter-spacing:0}
+.big-cap{font-size:13px;color:var(--muted);margin-top:-4px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;border-top:1px dashed var(--line);padding-top:12px}
+.stat{display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat .k{font-size:11px;letter-spacing:.06em;color:var(--muted)}
+.stat .v{font-family:var(--font-num);font-size:18px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat .s{font-size:12px;color:var(--muted)}
+.who button{border-radius:99px;padding:5px 2px;font-size:13px}
+.who button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+/* list */
+.sec-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sec-head h2{margin:0;font-size:17px;font-weight:700}
+.sec-head small{color:var(--muted);font-size:12px}
+.tiers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.tier{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 2px;display:flex;flex-direction:column;align-items:center;gap:1px}
+.tier .n{font-family:var(--font-num);font-size:20px;font-weight:600;line-height:1.1}
+.tier .t{font-size:11px;color:var(--muted);white-space:nowrap}
+.tier.on{border-color:currentColor;box-shadow:inset 0 0 0 1px currentColor;background:color-mix(in srgb,currentColor 8%,var(--surface))}
+.tier.zero .n{opacity:.45}
+.c-keep{color:var(--s-keep)} .c-con{color:var(--s-con)} .c-list{color:var(--s-list)} .c-sold{color:var(--s-sold)} .c-warn{color:var(--warn)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:0 8px;border-radius:99px;border:1px solid currentColor;white-space:nowrap;line-height:1.7;background:color-mix(in srgb,currentColor 9%,transparent)}
+.chip.c-keep{background:transparent;border-color:var(--line)}
+.chip.c-sold{border-style:double;border-width:3px;line-height:1.4;font-weight:700;letter-spacing:.08em;background:transparent}
+.search{display:flex;gap:8px;align-items:center}
+.search input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 10px;font-size:15px}
+.items{display:flex;flex-direction:column;gap:8px}
+.item{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:left;width:100%}
+.item:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.item.sold{background:var(--surface-2)}
+.item.sold .name{color:var(--muted)}
+.thumb{width:56px;height:56px;border-radius:10px;background:var(--accent-soft);display:grid;place-items:center;font-weight:700;color:var(--accent);overflow:hidden;font-size:20px}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.item .body{min-width:0;display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.item .name{font-weight:700;font-size:16px;line-height:1.3}
+.item .bm{font-size:12px;color:var(--muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .chips{display:flex;gap:5px;flex-wrap:wrap}
+.item .own{font-size:12px;color:var(--muted)}
+.item .price{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.item .price b{font-family:var(--font-num);font-size:18px;font-weight:600;line-height:1.1;white-space:nowrap}
+.item .price small{font-size:11px;color:var(--muted);white-space:nowrap}
+.item .price b.none{font-size:13px;color:var(--muted);font-family:var(--font-body);font-weight:500}
+.empty{font-size:14px;color:var(--muted);padding:16px;text-align:center;border:1px dashed var(--line);border-radius:12px}
+.foot{font-size:12px;color:var(--muted);text-align:center}
+
+/* FAB */
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:6;
+  background:var(--accent);color:var(--accent-ink);border:0;border-radius:99px;padding:12px 20px;font-weight:700;font-size:15px;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+body.offline .fab{display:none}
+
+/* sheets */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px}
+.sheet h2{margin:0;font-size:19px;text-wrap:balance}
+.sheet .sub{font-size:13px;color:var(--muted);margin-top:-10px}
+.btn{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:8px 14px;font-size:14px;color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.btn.tagb{background:var(--tag);color:var(--tag-ink);border-color:var(--tag);font-weight:700}
+.btn.icon{width:38px;padding:0;display:inline-grid;place-items:center}
+.btn.icon svg{width:17px;height:17px}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.danger{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+.sheet-actions{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.sheet-actions .right{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--muted)}
+
+/* detail */
+.d-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start}
+.d-title h2{font-size:22px;line-height:1.3}
+.d-title .bm{font-size:14px;color:var(--muted);margin-top:4px}
+.d-title .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+/* 吊牌：左側尖角 + 穿線孔 */
+.ptag{position:relative;background:var(--tag);color:var(--tag-ink);padding:8px 12px 8px 26px;clip-path:polygon(14px 0,100% 0,100% 100%,14px 100%,0 50%);border-radius:0 8px 8px 0;
+  display:flex;flex-direction:column;align-items:flex-end;min-width:7.5em}
+.ptag::before{content:"";position:absolute;left:10px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--surface)}
+.ptag small{font-size:11px;opacity:.85}
+.ptag b{font-family:var(--font-num);font-size:20px;font-weight:600;line-height:1.15;white-space:nowrap}
+.ptag.sold{background:var(--accent);color:var(--accent-ink)}
+.ptag.none{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.ptag.none::before{background:var(--line)}
+.ptag.none b{font-size:14px;font-family:var(--font-body)}
+.d-photos{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px;align-items:start}
+.d-main{aspect-ratio:1;max-width:100%;border-radius:16px;background:var(--accent-soft);display:grid;place-items:center;overflow:hidden;color:var(--accent);font-size:40px;font-weight:700}
+.d-main img{width:100%;height:100%;object-fit:cover}
+.d-thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.d-thumbs button{aspect-ratio:1;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);overflow:hidden;padding:0}
+.d-thumbs button.on{outline:2px solid var(--accent);outline-offset:1px}
+.d-thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);border-radius:10px;padding:2px;background:var(--surface-2);gap:2px}
+.seg button{border:0;background:none;border-radius:8px;padding:7px 2px;font-weight:700;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--surface);color:currentColor;box-shadow:0 0 0 1px currentColor}
+.seg button.on.c-keep{color:var(--ink)}
+.facts{background:var(--wash);border-radius:14px;padding:14px 16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:0}
+.facts > div{min-width:0}
+.facts dt{font-size:11px;letter-spacing:.06em;color:var(--muted)}
+.facts dd{margin:0;font-weight:500;font-size:14px;overflow-wrap:anywhere}
+.facts dd .num{font-size:16px;font-weight:600}
+.facts .wide{grid-column:1/-1}
+.zhe{display:inline-block;font-size:12px;font-weight:600;padding:0 7px;border-radius:6px;background:var(--tag-soft);color:var(--s-list);margin-left:4px;font-family:var(--font-body)}
+.notes{display:flex;flex-direction:column;gap:10px}
+.note .lab{font-size:11px;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:2px}
+.note p{margin:0;font-size:14px;line-height:1.65;white-space:pre-wrap}
+.ledger{border:1px solid var(--line);border-radius:14px;padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+.ledger h3{margin:0 0 4px;font-size:14px}
+.ledger .row{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+.ledger .row span:last-child{font-family:var(--font-num);font-weight:600}
+.ledger .row.total{border-top:1px solid var(--line);padding-top:6px;font-weight:700}
+.rate{font-family:var(--font-num);font-size:28px;font-weight:600;color:var(--accent);line-height:1}
+
+/* form */
+.fsec{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px}
+.fsec > h3{margin:0;font-size:13px;letter-spacing:.08em;color:var(--accent)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;min-width:0}
+.field > span{color:var(--muted)}
+.field input,.field select,.field textarea{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:9px 10px;font-size:16px;width:100%;min-width:0}
+.field textarea{resize:vertical}
+/* iOS Safari 的日期欄有內建最小寬度與不同高度，會撐出格子：統一外觀與高度 */
+.field input,.field select{min-height:44px}
+.field input[type=date]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;height:44px;line-height:24px;text-align:left}
+.field input[type=date]::-webkit-date-and-time-value{text-align:left;margin:0}
+.field input[type=date]::-webkit-calendar-picker-indicator{opacity:.6}
+.grid2 > *{min-width:0}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.toggles{display:flex;gap:6px;flex-wrap:wrap}
+.toggles button{border:1px solid var(--line);background:var(--surface-2);border-radius:99px;padding:5px 12px;font-size:14px}
+.toggles button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.f-photos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.f-photo{position:relative;aspect-ratio:1;max-width:100%;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
+.f-photo > button.pick{position:absolute;inset:0;border:0;padding:0;background:none}
+.f-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.f-photo.cover{outline:2px solid var(--tag);outline-offset:1px}
+.f-photo .badge{position:absolute;left:4px;bottom:4px;font-size:11px;background:var(--tag);color:var(--tag-ink);border-radius:5px;padding:0 5px;pointer-events:none}
+.f-photo .rm{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(10,18,14,.65);color:#fff;font-size:13px;line-height:22px;padding:0}
+.f-add{aspect-ratio:1;max-width:100%;border-radius:10px;border:1px dashed var(--line);display:grid;place-items:center;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;background:var(--surface-2)}
+.f-add input{display:none}
+
+/* FB post */
+.pick{display:flex;gap:6px;flex-wrap:wrap}
+.pick button{border:1px solid var(--line);background:var(--surface-2);border-radius:99px;padding:4px 11px;font-size:13px}
+.pick button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.pick button.fixed{cursor:default;opacity:.7}
+.post{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:12px;font-size:15px;line-height:1.7;width:100%;min-height:16em;resize:vertical;font-family:var(--font-body)}
+.after{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--tag-soft);border-radius:12px;padding:10px 12px;font-size:14px;flex-wrap:wrap}
+.switch{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.switch input{accent-color:var(--accent);width:18px;height:18px}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);
+  padding:9px 16px;border-radius:10px;font-size:14px;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .22s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}} .sheet.noanim{animation:none}}
+@media (max-width:380px){.big{font-size:38px}.stat .v{font-size:16px}.facts{grid-template-columns:1fr}}
+
+/* login */
+body.locked{overflow:hidden}
+.login{position:fixed;inset:0;z-index:40;background:var(--bg);overflow:auto;
+  padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.login-card{max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.login-brand{padding:12px 0 8px;border-bottom:3px solid var(--tag)}
+.login-brand h1{margin:0;font-size:30px;letter-spacing:.04em}
+.login-brand p{margin:4px 0 6px;color:var(--muted);font-size:14px}
+.login-opt{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.login-opt h2{margin:0;font-size:16px}
+.login-opt p{margin:0;font-size:13px;color:var(--muted)}
+.gbtn{min-height:44px;display:flex;align-items:center}
+.login-msg{font-size:14px;padding:10px 12px;border-radius:10px;background:var(--tag-soft)}
+.login-err{font-size:14px;color:var(--warn);min-height:1.4em}
+dl.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:14px;margin:0}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
+
+</style>
+
+</head>
+<body>
+
+<header class="top">
+  <div class="top-row">
+    <div class="brand"><h1>家庭二手庫</h1>
+      <div class="meta"><button class="pill" id="syncPill" data-act="acct">範例模式</button></div></div>
+    <button class="mini" data-act="settings" id="setBtn" aria-label="交易與文案設定"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>文案設定</button>
+  </div>
+  <nav class="rail" id="rail" aria-label="類別"></nav>
+  <div class="offline-banner" id="offBanner">離線中：顯示最後一次同步的資料，不能修改。</div>
+</header>
+
+<div id="login" class="login" hidden></div>
+
+<main class="wrap">
+  <section class="sum" id="sum"></section>
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <div class="sec-head"><h2 id="invTitle">全部物品</h2><small id="invCount"></small></div>
+    <div class="tiers" id="tiers" aria-label="依狀態篩選"></div>
+    <div class="search"><input id="q" type="search" placeholder="搜尋名稱、品牌、型號" aria-label="搜尋"></div>
+    <div class="items" id="items"></div>
+  </section>
+  <p class="foot" id="foot"></p>
+</main>
+
+<button class="fab" id="fab" data-act="add">＋ 新增物品</button>
+<div id="sheetRoot"></div>
+
+<script>
+(function(){
+  const CONFIG=window.FR_CONFIG||{API:'',CLIENT_ID:''};
+  const pad=n=>String(n).padStart(2,'0');
+  const fmt=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const parse=s=>{const [y,m,d]=String(s).split('-').map(Number); return new Date(y,(m||1)-1,d||1);};
+  const isDate=s=>/^\d{4}-\d{1,2}(-\d{1,2})?$/.test(String(s||''));
+  const daysTo=s=>Math.round((parse(s)-today)/86400000);
+  const ago=(m,d=0)=>{const x=new Date(today); x.setMonth(x.getMonth()-m); x.setDate(x.getDate()-d); return fmt(x);};
+  const later=m=>ago(-m);
+  const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const money=n=>'NT$'+Number(n).toLocaleString('en-US');
+  const n0=v=>Number(v)||0;
+  const ICON={
+    pencil:'<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/></svg>'
+  };
+
+  // ---- 類別 ----
+  const PACK3=['全配盒裝','有盒缺件','無盒'];
+  const CFG={
+    '3C':  {title:'相機與 3C',subs:['相機','鏡頭','平板','手機','電腦','耳機音響','遊戲機','配件'],pack:['全配盒裝','有盒缺件','無盒裸機'],origin:true,brandLab:'品牌',modelLab:'型號／規格'},
+    '服飾':{title:'服飾配件',subs:['外套','上衣','褲裙','鞋','包包','配件'],pack:['全新含吊牌','無吊牌'],size:true,brandLab:'品牌',modelLab:'款式／顏色'},
+    '書籍':{title:'書籍',subs:['專業書','原文書','繪本童書','一般書','套書'],pack:null,brandLab:'作者',modelLab:'出版社・版次'},
+    '育兒':{title:'育兒用品',subs:['推車','汽座','背巾','餐椅','玩具','衣物','寢具','其他'],pack:PACK3,size:true,age:true,mfg:true,brandLab:'品牌',modelLab:'型號'},
+    '其他':{title:'家電與其他',subs:['家電','廚具','家具','運動戶外','樂器','其他'],pack:PACK3,brandLab:'品牌',modelLab:'型號'}
+  };
+  const CATS=Object.keys(CFG);
+  const CONDS=['全新未拆','全新已拆','近全新','良好','明顯使用痕跡','有瑕疵'];
+  const ORIGINS=['公司貨','平行輸入','國外購入'];
+  const CHANNELS=['官網','原廠門市','百貨專櫃','momo','PChome','蝦皮商城','蝦皮賣家','燦坤','全國電子','婦幼展','日本購入','二手購入','親友贈送'];
+  const SHIPS=['7-11 賣貨便','全家好賣+','蝦皮店到店','郵寄／宅配'];
+  const PRICE_NOTES=['','可小議','不議價','歡迎出價'];
+  const ST={keep:['持有中','c-keep'],consider:['考慮出售','c-con'],listed:['上架中','c-list'],sold:['已售出','c-sold']};
+  const ST_KEYS=['keep','consider','listed','sold'];
+  const ST_ORDER={listed:0,consider:1,keep:2,sold:3};
+  // FB 文案可勾選的欄位（售價、名稱固定放）
+  const FIELDS=[['brand','品牌型號'],['cond','使用狀況'],['pack','包裝配件'],['buyDate','購入時間'],['channel','購入途徑'],['list','原價'],['paid','購入價'],['disc','折扣'],
+    ['warr','保固'],['spec','尺寸・年齡'],['buyWhy','購買原因'],['sellWhy','出售原因'],['desc','補充說明'],['deal','交易方式']];
+  const DEFAULT_FIELDS=['brand','cond','pack','buyDate','channel','list','warr','spec','sellWhy','desc','deal'];
+
+  // ---- 範例資料 ----
+  const S={
+    cat:'全部', status:null, owner:'全部', q:'',
+    members:[{id:'dad',name:'爸爸'},{id:'mom',name:'媽媽'},{id:'son1',name:'哥哥'},{id:'son2',name:'弟弟'},{id:'girl',name:'妹妹'}],
+    settings:{meet:'台中北屯',ship:['7-11 賣貨便'],pay:'面交付現／轉帳',priceNote:'',footer:'有興趣請私訊，謝謝！',postFields:DEFAULT_FIELDS.slice(),emoji:true},
+    items:[]
+  };
+  const BLANK={cat:'其他',sub:'',name:'',brand:'',model:'',owner:'all',status:'keep',buyDate:'',listPrice:'',buyPrice:'',discNote:'',channel:'',origin:'',receipt:'',
+    warrantyEnd:'',warrantyNote:'',pack:'',packNote:'',cond:'',condNote:'',size:'',age:'',mfgDate:'',accident:'',buyWhy:'',sellWhy:'',desc:'',
+    askPrice:'',priceNote:'',listedAt:'',soldPrice:'',soldDate:'',soldFee:'',soldVia:'',postFields:[],photos:[]};
+  const I=o=>S.items.push({...BLANK,...o});
+  I({id:'R001',cat:'3C',sub:'相機',name:'α7C 全片幅單機身',brand:'Sony',model:'ILCE-7C 黑',owner:'dad',status:'consider',buyDate:ago(31),listPrice:59980,buyPrice:53980,discNote:'舊機折抵',
+    channel:'官網',origin:'公司貨',receipt:'有',warrantyEnd:ago(7),pack:'全配盒裝',packNote:'原廠電池 ×2、充電器、背帶',cond:'近全新',condNote:'快門約 8,000 次，機身無刮傷',
+    buyWhy:'講課與手術錄影',sellWhy:'改用診所的錄影設備，閒置中',askPrice:34000});
+  I({id:'R002',cat:'3C',sub:'平板',name:'iPad Air 11 吋（M2）128GB',brand:'Apple',model:'Wi-Fi 太空灰',owner:'mom',status:'listed',buyDate:ago(16),listPrice:19900,buyPrice:19900,
+    channel:'官網',origin:'公司貨',receipt:'有',warrantyEnd:ago(4),pack:'全配盒裝',packNote:'附原廠充電線，已貼保護貼',cond:'良好',condNote:'背面一道細刮痕（見照片）',
+    sellWhy:'換成大尺寸',askPrice:15500,priceNote:'可小議',listedAt:ago(0,12)});
+  I({id:'R003',cat:'3C',sub:'遊戲機',name:'Switch OLED',brand:'Nintendo',model:'白色主機',owner:'all',status:'keep',buyDate:ago(26),buyPrice:10480,channel:'momo',origin:'公司貨',
+    receipt:'有',pack:'全配盒裝',cond:'良好',buyWhy:'全家一起玩'});
+  I({id:'R004',cat:'服飾',sub:'外套',name:'兒童羽絨外套',brand:'The North Face',model:'深藍',owner:'son1',status:'consider',size:'130',buyDate:ago(23),listPrice:4980,buyPrice:3980,
+    discNote:'雙 11',channel:'百貨專櫃',pack:'無吊牌',cond:'良好',condNote:'袖口輕微起毛球',sellWhy:'穿不下了，弟弟也穿不到這個尺寸',askPrice:1500});
+  I({id:'R005',cat:'書籍',sub:'原文書',name:'Contemporary Implant Dentistry 4th ed.',brand:'Randolph R. Resnik',model:'Elsevier・第 4 版',owner:'dad',status:'keep',buyDate:ago(60),
+    buyPrice:6800,channel:'原文書代理商',cond:'良好',condNote:'前三章有螢光筆畫線',buyWhy:'植牙課程備課'});
+  I({id:'R006',cat:'育兒',sub:'汽座',name:'360 度旋轉汽座',brand:'Cybex',model:'Sirona Z i-Size',owner:'son2',status:'listed',buyDate:ago(50),listPrice:18800,buyPrice:15800,discNote:'展場優惠',
+    channel:'婦幼展',receipt:'有',pack:'有盒缺件',packNote:'底座、新生兒內墊齊全，缺紙本說明書',cond:'良好',condNote:'布套已拆洗',age:'0–4 歲（105 cm 以下）',mfgDate:ago(51),accident:'無',
+    sellWhy:'弟弟已換成長型汽座',askPrice:6000,listedAt:ago(0,5)});
+  I({id:'R007',cat:'育兒',sub:'推車',name:'輕便嬰兒推車',brand:'Babyzen',model:'YOYO² 6+ 黑框',owner:'girl',status:'sold',buyDate:ago(29),listPrice:18900,buyPrice:16900,channel:'百貨專櫃',
+    pack:'全配盒裝',cond:'良好',age:'6 個月–4 歲',askPrice:9000,listedAt:ago(2),soldPrice:8500,soldDate:ago(1),soldFee:60,soldVia:'FB 社團'});
+  I({id:'R008',cat:'育兒',sub:'餐椅',name:'成長型餐椅',brand:'Stokke',model:'Tripp Trapp 白',owner:'girl',status:'keep',buyDate:ago(20),buyPrice:8880,channel:'momo',pack:'無盒',cond:'良好',age:'6 個月起'});
+
+  // ---- 欲購清單 ----
+  const PRIOS={'1':['優先','p1'],'2':['想要','p2'],'3':['有空再看','p3']};
+  const VIAS=['買新品','找二手','都可以'];
+  const WBLANK={cat:'3C',name:'',owner:'all',budget:'',refPrice:'',priority:'2',via:'都可以',buyWhy:'',note:'',link:'',createdAt:''};
+  S.view='ready';   // 摘要大數字：ready 準備出售 / cost 總投入
+  S.wants=[
+    {...WBLANK,id:'W001',cat:'育兒',name:'成長型汽座 9–36 kg',owner:'girl',budget:8000,refPrice:12800,priority:'1',via:'買新品',buyWhy:'妹妹快超過目前汽座的身高上限',note:'汽座不買二手，看不出事故紀錄',createdAt:ago(0,10)},
+    {...WBLANK,id:'W002',cat:'3C',name:'手術錄影用運動相機',owner:'dad',budget:12000,refPrice:15990,priority:'2',via:'都可以',buyWhy:'取代 α7C，固定在頭燈支架上',note:'二手要確認防手震與電池健康度',createdAt:ago(0,20)},
+    {...WBLANK,id:'W003',cat:'書籍',name:'兒童科普繪本套書',owner:'son1',budget:3000,refPrice:5600,priority:'3',via:'找二手',note:'FB 社團常有整套出清',createdAt:ago(1)}
+  ];
+
+  // ---- 計算 ----
+  const mem=id=>S.members.find(m=>m.id===id);
+  const ownerName=id=>id==='all'?'全家':(mem(id)||{name:id}).name;
+  const cfgOf=it=>CFG[it.cat]||CFG['其他'];
+  const monthsSince=s=>{if(!isDate(s))return null; const d=parse(s); let m=(today.getFullYear()-d.getFullYear())*12+today.getMonth()-d.getMonth(); if(today.getDate()<d.getDate())m--; return Math.max(0,m);};
+  const durTxt=m=>m==null?'':m<1?'不到 1 個月':m<12?`${m} 個月`:`${Math.floor(m/12)} 年${m%12?` ${m%12} 個月`:''}`;
+  const ym=s=>{const d=parse(s); return `${d.getFullYear()} 年 ${d.getMonth()+1} 月`;};
+  const zhe=(list,paid)=>{list=n0(list); paid=n0(paid); if(!(list>0&&paid>0)||paid>=list)return ''; const z=Math.round(paid/list*100); return z%10===0?`${z/10} 折`:`${z} 折`;};
+  const net=it=>n0(it.soldPrice)-n0(it.soldFee);
+  const recov=it=>n0(it.buyPrice)>0?Math.round(net(it)/n0(it.buyPrice)*100):null;
+  const askRecov=it=>n0(it.buyPrice)>0&&n0(it.askPrice)>0?Math.round(n0(it.askPrice)/n0(it.buyPrice)*100):null;
+  function warrTxt(it){
+    if(!isDate(it.warrantyEnd))return '';
+    const d=daysTo(it.warrantyEnd);
+    if(d<0)return '已過保';
+    const m=Math.floor(d/30.4);
+    return `至 ${it.warrantyEnd.slice(0,7)}（剩 ${m<1?d+' 天':durTxt(m)}）`;
+  }
+  const holdMonths=it=>{if(!isDate(it.buyDate))return null; if(it.status==='sold'&&isDate(it.soldDate)){const a=parse(it.buyDate),b=parse(it.soldDate); return Math.max(0,(b.getFullYear()-a.getFullYear())*12+b.getMonth()-a.getMonth());} return monthsSince(it.buyDate);};
+
+  function scoped(){ // 類別 + 家人篩選（摘要與狀態計數用）
+    return S.items.filter(it=>(S.cat==='全部'||it.cat===S.cat)&&(S.owner==='全部'||it.owner===S.owner));
+  }
+  function matchQ(it){
+    const q=S.q.trim().toLowerCase(); if(!q)return true;
+    return [it.name,it.brand,it.model,it.sub,it.channel].join(' ').toLowerCase().includes(q);
+  }
+
+  // ---- 畫面 ----
+  const isWish=()=>S.cat==='欲購';
+  function renderRail(){
+    document.getElementById('rail').innerHTML=['全部'].concat(CATS).map(k=>`<button data-act="cat" data-k="${k}" class="${S.cat===k?'on':''}" aria-label="${k==='全部'?'全部物品':CFG[k].title}">${k}</button>`).join('')
+      +`<button data-act="cat" data-k="欲購" class="wish ${isWish()?'on':''}" aria-label="欲購清單">欲購</button>`;
+  }
+  const whoRow=()=>`<div class="who" role="group" aria-label="依歸屬篩選">${['全部'].concat(S.members.map(m=>m.id),['all']).map(id=>`<button data-act="owner" data-k="${id}" class="${S.owner===id?'on':''}">${id==='全部'?'全部':esc(ownerName(id))}</button>`).join('')}</div>`;
+  const wantsScoped=()=>S.wants.filter(w=>S.owner==='全部'||w.owner===S.owner);
+  // 摘要卡：三種畫面共用同一個版型，切換時位置不跳；算法收在「怎麼算」裡
+  const howRow=(k,v,cls='')=>`<div class="row ${cls}"><span>${k}</span><span>${v}</span></div>`;
+  function sumCard({seg,label,big,count,cap,how}){
+    return `${seg?`<div class="sum-top">${seg}</div>`:''}
+      <p class="label sum-label">${label}</p>
+      <div class="big">${big}<small>${count}</small></div>
+      <div class="big-cap">${cap}</div>
+      <details class="how" ${S.howOpen?'open':''}><summary>怎麼算</summary><div class="how-in">${how}</div></details>
+      ${whoRow()}`;
+  }
+  function renderWishSum(){
+    const ws=wantsScoped(), bud=ws.reduce((s,w)=>s+n0(w.budget),0), ref=ws.reduce((s,w)=>s+n0(w.refPrice),0), noB=ws.filter(w=>!n0(w.budget)).length;
+    const p1=ws.filter(w=>w.priority==='1'), p1b=p1.reduce((s,w)=>s+n0(w.budget),0);
+    document.getElementById('sum').innerHTML=sumCard({label:'欲購清單的預算合計',big:money(bud),count:`${ws.length} 件`,
+      cap:`優先 ${p1.length} 件・預算 ${money(p1b)}`,
+      how:`<p class="how-what">所有欲購項目的「預算」加總。</p>
+        ${howRow(`優先 ${p1.length} 件`,money(p1b))}
+        ${howRow('新品參考價合計',ref?money(ref):'—')}
+        ${howRow('預算比參考價少',ref&&bud?money(Math.max(0,ref-bud)):'—')}
+        ${noB?howRow(`沒訂預算 ${noB} 件`,'不計入','c-warn'):''}`});
+  }
+  function renderSum(){
+    if(isWish()){renderWishSum();return;}
+    const its=scoped(), scope=S.cat!=='全部'?`・${esc(CFG[S.cat].title)}`:'';
+    const by=k=>its.filter(it=>it.status===k);
+    const sum=(arr,f)=>arr.reduce((s,it)=>s+n0(it[f]),0);
+    const held=its.filter(it=>it.status!=='sold'), ready=[...by('listed'),...by('consider')], sold=by('sold');
+    const soldNet=sold.reduce((s,it)=>s+net(it),0), withCost=sold.filter(it=>n0(it.buyPrice)>0);
+    const rate=withCost.length?Math.round(withCost.reduce((s,it)=>s+net(it),0)/sum(withCost,'buyPrice')*100):null;
+    const soldRows=`${howRow(`已售出 ${sold.length} 件・實收`,money(soldNet))}${howRow('平均回收率（實收 ÷ 購入價）',rate==null?'—':rate+'%')}`;
+    const seg=viewSeg();
+    let card;
+    if(S.view==='value'){
+      const noCost=held.filter(it=>!n0(it.buyPrice)).length;
+      card={seg,label:`手邊物品的總價值${scope}`,big:money(sum(held,'buyPrice')),count:`${held.length} 件`,
+        cap:`以實付價計算，不含已售出`,
+        how:`<p class="how-what">手邊物品（持有中、考慮出售、上架中）的「實付價」加總。</p>
+          ${['keep','consider','listed'].map(k=>howRow(`${ST[k][0]} ${by(k).length} 件`,money(sum(by(k),'buyPrice')))).join('')}
+          ${noCost?howRow(`沒填購入價 ${noCost} 件`,'不計入','c-warn'):''}${soldRows}`};
+    }else{
+      const noPrice=ready.filter(it=>!n0(it.askPrice)).length;
+      card={seg,label:`預計可回收的現金${scope}`,big:money(sum(ready,'askPrice')),count:`${ready.length} 件`,
+        cap:`上架中 ${by('listed').length} 件・考慮出售 ${by('consider').length} 件`,
+        how:`<p class="how-what">「上架中」和「考慮出售」物品的「預計售價」加總。</p>
+          ${['listed','consider'].map(k=>howRow(`${ST[k][0]} ${by(k).length} 件`,money(sum(by(k),'askPrice')))).join('')}
+          ${noPrice?howRow(`還沒定價 ${noPrice} 件`,'不計入','c-warn'):''}${soldRows}`};
+    }
+    document.getElementById('sum').innerHTML=sumCard(card);
+  }
+  const viewSeg=()=>`<div class="vseg" role="group" aria-label="切換金額">${[['ready','預計出售'],['value','總價值']].map(([k,l])=>`<button data-act="view" data-k="${k}" aria-pressed="${S.view===k}">${l}</button>`).join('')}</div>`;
+  function renderTiers(){
+    const its=scoped().filter(matchQ);
+    document.getElementById('tiers').innerHTML=ST_KEYS.map(k=>{const n=its.filter(it=>it.status===k).length;
+      return `<button class="tier ${ST[k][1]} ${S.status===k?'on':''} ${n?'':'zero'}" data-act="tier" data-k="${k}"><span class="n">${n}</span><span class="t">${ST[k][0]}</span></button>`;}).join('');
+  }
+  function priceCell(it){
+    if(it.status==='sold'){const r=recov(it); return `<b>${money(net(it))}</b><small>${r==null?'實收':'回收 '+r+'%'}</small>`;}
+    if(n0(it.askPrice))return `<b>${money(it.askPrice)}</b><small>${n0(it.buyPrice)?'購入 '+money(it.buyPrice):'預計售價'}</small>`;
+    return `<b class="none">${n0(it.buyPrice)?money(it.buyPrice):'未填價格'}</b><small>${n0(it.buyPrice)?'購入價':''}</small>`;
+  }
+  function renderItems(){
+    document.getElementById('invTitle').textContent=S.cat==='全部'?'全部物品':CFG[S.cat].title;
+    let its=scoped().filter(matchQ);
+    if(S.status)its=its.filter(it=>it.status===S.status);
+    its.sort((a,b)=>ST_ORDER[a.status]-ST_ORDER[b.status]||String(b.buyDate).localeCompare(String(a.buyDate)));
+    document.getElementById('invCount').textContent=`${its.length} 件${S.status?'・'+ST[S.status][0]:''}`;
+    const el=document.getElementById('items');
+    if(!its.length){el.innerHTML=`<div class="empty">這個條件下沒有物品${S.offline?'':'。點右下「新增物品」加入。'}</div>`;return;}
+    el.innerHTML=its.map(it=>`<button class="item ${it.status==='sold'?'sold':''}" data-act="open" data-id="${it.id}">
+        <span class="thumb">${it.photos.length?`<img src="${psrc(it.photos[0])}" alt="">`:esc(it.name.slice(0,1))}</span>
+        <span class="body"><span class="name">${esc(it.name)}</span>
+          ${it.brand||it.model?`<span class="bm">${esc([it.brand,it.model].filter(Boolean).join('・'))}</span>`:''}
+          <span class="chips"><span class="chip ${ST[it.status][1]}">${ST[it.status][0]}</span><span class="own">${esc(ownerName(it.owner))}</span></span></span>
+        <span class="price">${priceCell(it)}</span></button>`).join('');
+  }
+  const wantQ=w=>{const q=S.q.trim().toLowerCase(); return !q||[w.name,w.note,w.buyWhy].join(' ').toLowerCase().includes(q);};
+  function renderPrioTiers(){
+    const ws=wantsScoped().filter(wantQ);
+    document.getElementById('tiers').innerHTML=Object.entries(PRIOS).map(([k,[l]])=>{const n=ws.filter(w=>w.priority===k).length;
+      return `<button class="tier ${k==='1'?'c-list':k==='2'?'c-sold':'c-keep'} ${S.prio===k?'on':''} ${n?'':'zero'}" data-act="prio" data-k="${k}" aria-pressed="${S.prio===k}"><span class="n">${n}</span><span class="t">${l}</span></button>`;}).join('');
+  }
+  function renderWishes(){
+    document.getElementById('invTitle').textContent='欲購清單';
+    let ws=wantsScoped().filter(wantQ);
+    if(S.prio)ws=ws.filter(w=>w.priority===S.prio);
+    ws.sort((a,b)=>String(a.priority).localeCompare(String(b.priority))||String(b.createdAt).localeCompare(String(a.createdAt)));
+    document.getElementById('invCount').textContent=`${ws.length} 件${S.prio?'・只看'+PRIOS[S.prio][0]:''}`;
+    const el=document.getElementById('items');
+    if(!ws.length){el.innerHTML=`<div class="empty">還沒有想買的東西${S.offline?'':'。點右下「新增欲購」加入。'}</div>`;return;}
+    el.innerHTML=ws.map(w=>{const p=PRIOS[w.priority]||PRIOS['2'];
+      return `<button class="item" data-act="wopen" data-id="${w.id}">
+        <span class="thumb">${esc(w.name.slice(0,1))}</span>
+        <span class="body"><span class="name">${esc(w.name)}</span>
+          <span class="bm">${esc((CFG[w.cat]||CFG['其他']).title)}・${esc(w.via)}</span>
+          <span class="chips"><span class="prio ${p[1]}">${p[0]}</span><span class="own">給${esc(ownerName(w.owner))}</span></span></span>
+        <span class="price">${n0(w.budget)?`<b>${money(w.budget)}</b><small>預算${n0(w.refPrice)?'・新品 '+money(w.refPrice):''}</small>`:`<b class="none">未訂預算</b><small>${n0(w.refPrice)?'新品 '+money(w.refPrice):''}</small>`}</span></button>`;}).join('');
+  }
+  function render(){
+    renderRail(); renderSum();
+    document.getElementById('tiers').classList.toggle('three',isWish());
+    document.getElementById('q').placeholder=isWish()?'搜尋欲購項目':'搜尋名稱、品牌、型號';
+    document.getElementById('fab').textContent=isWish()?'＋ 新增欲購':'＋ 新增物品';
+    if(isWish()){renderPrioTiers(); renderWishes();} else {renderTiers(); renderItems();}
+    document.getElementById('foot').textContent=DEMO?'範例模式：資料只示範，重新整理會回到預設。':'';
+  }
+
+  // ---- sheets ----
+  const root=document.getElementById('sheetRoot');
+  function openSheet(html,label,keep){
+    const prev=root.querySelector('.sheet'), top=prev?prev.scrollTop:0;
+    root.innerHTML=`<div class="scrim" data-act="close-scrim"><div class="sheet ${keep?'noanim':''}" role="dialog" aria-modal="true" aria-label="${esc(label||'')}">${html}</div></div>`;
+    if(keep)root.querySelector('.sheet').scrollTop=top;
+  }
+  function closeSheet(){root.innerHTML='';}
+  function toast(t){const d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2400);}
+
+  // ---- 詳細頁 ----
+  let photoIdx=0;
+  function specRows(it){
+    const c=cfgOf(it), r=[];
+    if(it.size)r.push(['尺寸',esc(it.size)]);
+    if(it.age)r.push(['適用',esc(it.age)]);
+    if(it.mfgDate)r.push(['製造日期',`<span class="num">${esc(String(it.mfgDate).slice(0,7))}</span>`]);
+    if(it.sub==='汽座'||it.accident)r.push(['事故紀錄',it.accident?esc(it.accident):'<span class="c-warn">未填</span>']);
+    return r;
+  }
+  function openItem(id,keepIdx){
+    const it=S.items.find(x=>x.id===id); if(!it)return;
+    if(!keepIdx)photoIdx=0; if(photoIdx>=it.photos.length)photoIdx=0;
+    const ro=S.offline, sold=it.status==='sold';
+    const main=it.photos[photoIdx];
+    const side=it.photos.length>1
+      ?`<div class="d-thumbs">${it.photos.map((p,i)=>`<button data-act="ph" data-id="${it.id}" data-i="${i}" class="${i===photoIdx?'on':''}" aria-label="第 ${i+1} 張照片"><img src="${psrc(p)}" alt=""></button>`).join('')}</div>`
+      :`<div class="hint">${it.photos.length?'只有 1 張照片。':'還沒有照片。'}${ro?'':'在編輯裡可以加照片。上架前建議拍正面、背面、瑕疵處和配件全貌。'}</div>`;
+    const tag=sold?`<div class="ptag sold"><small>成交</small><b>${money(it.soldPrice)}</b></div>`
+      :n0(it.askPrice)?`<div class="ptag"><small>預計售價</small><b>${money(it.askPrice)}</b></div>`:`<div class="ptag none"><small>預計售價</small><b>未定價</b></div>`;
+    const row=(k,v,wide)=>v?`<div class="${wide?'wide':''}"><dt>${k}</dt><dd>${v}</dd></div>`:'';
+    const hm=holdMonths(it), z=zhe(it.listPrice,it.buyPrice);
+    const facts=[
+      row('購入日期',isDate(it.buyDate)?`<span class="num">${esc(it.buyDate)}</span><br><span class="hint">${sold?'持有':'已用'} ${durTxt(hm)}</span>`:''),
+      row('購入途徑',esc([it.channel,it.origin].filter(Boolean).join('・'))),
+      row('原價',n0(it.listPrice)?`<span class="num">${money(it.listPrice)}</span>`:''),
+      row('購入價',n0(it.buyPrice)?`<span class="num">${money(it.buyPrice)}</span>${z?`<span class="zhe">${z}</span>`:''}${it.discNote?`<br><span class="hint">${esc(it.discNote)}</span>`:''}`:''),
+      row('保固',isDate(it.warrantyEnd)||it.warrantyNote?`${esc(warrTxt(it))}${it.warrantyNote?`<br><span class="hint">${esc(it.warrantyNote)}</span>`:''}`:'無資料'),
+      row('發票／證明',it.receipt?esc(it.receipt==='有'?'有':'沒有'):''),
+      row('包裝',esc([it.pack,it.packNote].filter(Boolean).join('：')),true),
+      row('使用狀況',esc([it.cond,it.condNote].filter(Boolean).join('：')),true),
+      ...specRows(it).map(([k,v])=>row(k,v))
+    ].join('');
+    const notes=[['購買原因',it.buyWhy],['出售原因',it.sellWhy],['補充說明',it.desc]].filter(x=>x[1]);
+    const r=recov(it);
+    const ledger=sold?`<div class="ledger"><h3>成交紀錄</h3>
+        <div class="row"><span>成交價</span><span>${money(it.soldPrice)}</span></div>
+        ${n0(it.soldFee)?`<div class="row"><span>運費／手續費</span><span>−${money(it.soldFee)}</span></div>`:''}
+        <div class="row total"><span>實收</span><span>${money(net(it))}</span></div>
+        <div class="row"><span>${esc([it.soldDate,it.soldVia].filter(Boolean).join('・'))}</span><span>${r==null?'':`<span class="rate">${r}%</span>`}</span></div>
+        ${r!=null?`<div class="hint">回收率 = 實收 ÷ 購入價 ${money(it.buyPrice)}${hm!=null?`，持有 ${durTxt(hm)}`:''}</div>`:''}</div>`:'';
+    const listedDays=it.status==='listed'&&isDate(it.listedAt)?-daysTo(it.listedAt):null;
+    openSheet(`
+      <div class="d-head">
+        <div class="d-title"><h2>${esc(it.name)}</h2>
+          <div class="bm">${esc([it.brand,it.model].filter(Boolean).join('・')||it.sub)}${it.brand||it.model?'・'+esc(it.sub):''}</div>
+          <div class="chips"><span class="chip ${ST[it.status][1]}">${ST[it.status][0]}</span><span class="chip c-keep">${esc(ownerName(it.owner))}的</span>
+            ${listedDays!=null?`<span class="chip c-keep">已上架 ${listedDays} 天</span>`:''}</div></div>
+        ${tag}
+      </div>
+      <div class="d-photos">
+        <div class="d-main">${main?`<img src="${pfull(main)}" data-pid="${esc(main)}" alt="${esc(it.name)}">`:esc(it.name.slice(0,1))}</div>
+        ${side}
+      </div>
+      <div class="field"><span>狀態</span><div class="seg" role="group" aria-label="變更狀態">${ST_KEYS.map(k=>`<button data-act="st" data-id="${it.id}" data-k="${k}" class="${ST[k][1]} ${it.status===k?'on':''}" ${ro?'disabled':''}>${ST[k][0]}</button>`).join('')}</div></div>
+      ${ledger}
+      <dl class="facts">${facts}</dl>
+      ${notes.length?`<div class="notes">${notes.map(([k,v])=>`<div class="note"><span class="lab">${k}</span><p>${esc(v)}</p></div>`).join('')}</div>`:''}
+      <div class="sheet-actions">
+        <button class="btn" data-act="close">關閉</button>
+        <div class="right">
+          <button class="btn icon" data-act="edit" data-id="${it.id}" aria-label="編輯物品" ${ro?'disabled':''}>${ICON.pencil}</button>
+          <button class="btn tagb" data-act="post" data-id="${it.id}">複製 FB 文案</button>
+        </div>
+      </div>`,it.name);
+  }
+
+  // ---- 售出 ----
+  let sState=null;
+  function openSold(id){
+    const it=S.items.find(x=>x.id===id);
+    sState={id,soldPrice:it.soldPrice||it.askPrice||'',soldDate:it.soldDate||fmt(today),soldFee:it.soldFee||'',soldVia:it.soldVia||'FB 社團'};
+    drawSold();
+  }
+  function drawSold(){
+    const it=S.items.find(x=>x.id===sState.id), f=sState;
+    const r=n0(it.buyPrice)>0&&n0(f.soldPrice)>0?Math.round((n0(f.soldPrice)-n0(f.soldFee))/n0(it.buyPrice)*100):null;
+    openSheet(`<h2>標記為已售出</h2><div class="sub">${esc(it.name)}${n0(it.buyPrice)?`・購入 ${money(it.buyPrice)}`:''}</div>
+      <div class="grid2">
+        <label class="field"><span>成交價</span><input id="s-soldPrice" data-s="soldPrice" type="number" inputmode="numeric" value="${esc(f.soldPrice)}"></label>
+        <label class="field"><span>成交日</span><input id="s-soldDate" data-s="soldDate" type="date" value="${esc(f.soldDate)}"></label>
+        <label class="field"><span>運費／手續費（自付）</span><input id="s-soldFee" data-s="soldFee" type="number" inputmode="numeric" value="${esc(f.soldFee)}" placeholder="0"></label>
+        <label class="field"><span>成交管道</span><input id="s-soldVia" data-s="soldVia" list="dl-via" value="${esc(f.soldVia)}"></label>
+      </div>
+      <datalist id="dl-via"><option>FB 社團</option><option>FB Marketplace</option><option>親友</option><option>旋轉拍賣</option><option>二手店收購</option></datalist>
+      <div class="hint" id="s-rate">${r!=null?`回收率約 ${r}%`:''}</div>
+      <div class="sheet-actions"><button class="btn" data-act="back" data-id="${it.id}">取消</button><button class="btn primary" data-act="sok">確認售出</button></div>`,'標記為已售出');
+  }
+
+  // ---- 新增／編輯 ----
+  let fState=null;
+  function openForm(id,want){
+    const it=id?S.items.find(x=>x.id===id):null;
+    const c=want?(CFG[want.cat]?want.cat:'其他'):CFG[S.cat]?S.cat:'3C';
+    fState=it?JSON.parse(JSON.stringify(it)):{...JSON.parse(JSON.stringify(BLANK)),id:null,cat:c,sub:CFG[c].subs[0],owner:S.owner!=='全部'?S.owner:'all',buyDate:fmt(today)};
+    if(want&&!it)Object.assign(fState,{name:want.name,owner:want.owner||'all',buyWhy:want.buyWhy||'',listPrice:want.refPrice||'',fromWant:want.id});
+    drawForm(false);
+  }
+  function drawForm(keep=true){
+    const f=fState, c=CFG[f.cat];
+    const inp=(k,lab,type,extra='')=>`<label class="field"><span>${lab}</span><input id="f-${k}" data-f="${k}" ${type?`type="${type}"`:''} value="${esc(f[k]??'')}" ${extra}></label>`;
+    const ta=(k,lab,ph)=>`<label class="field"><span>${lab}</span><textarea id="f-${k}" data-f="${k}" rows="2" placeholder="${esc(ph||'')}">${esc(f[k])}</textarea></label>`;
+    const tog=(k,lab,opts,allowNone=true)=>`<div class="field"><span>${lab}</span><div class="toggles">${opts.map(o=>`<button data-act="ftog" data-k="${k}" data-v="${esc(o)}" class="${f[k]===o?'on':''}">${esc(o)}</button>`).join('')}</div></div>`;
+    const z=zhe(f.listPrice,f.buyPrice), ar=askRecov(f);
+    openSheet(`<h2>${f.id?'編輯物品':f.fromWant?'買到了：補上資料':'新增物品'}</h2><div class="sub">${f.id?esc(f.name):f.fromWant?'填好實付價和購入途徑，儲存後會從欲購清單移到物品裡':'先填名稱和價格，其他之後再補也可以'}</div>
+      <div class="field"><span>照片（點一張設為封面）</span>
+        <div class="f-photos">${f.photos.map((p,i)=>`<div class="f-photo ${i===0?'cover':''}"><button class="pick" data-act="fcover" data-i="${i}" aria-label="設為封面"><img src="${psrc(p)}" alt=""></button>${i===0?'<span class="badge">封面</span>':''}<button class="rm" data-act="frm" data-i="${i}" aria-label="移除照片">✕</button></div>`).join('')}
+          <label class="f-add" for="f-files">＋<br>加照片<input type="file" id="f-files" accept="image/*" multiple data-fphoto="1"></label></div></div>
+
+      <div class="fsec"><h3>基本</h3>
+        <div class="grid2">
+          <label class="field"><span>類別</span><select id="f-cat" data-f="cat">${CATS.map(k=>`<option value="${k}" ${f.cat===k?'selected':''}>${CFG[k].title}</option>`).join('')}</select></label>
+          <label class="field"><span>子類</span><select id="f-sub" data-f="sub">${c.subs.map(s=>`<option ${f.sub===s?'selected':''}>${s}</option>`).join('')}</select></label>
+        </div>
+        ${inp('name','名稱','','placeholder="例：α7C 單機身、兒童羽絨外套"')}
+        <div class="grid2">${inp('brand',c.brandLab)}${inp('model',c.modelLab)}</div>
+        <div class="grid2">
+          <label class="field"><span>歸屬</span><select id="f-owner" data-f="owner"><option value="all" ${f.owner==='all'?'selected':''}>全家</option>${S.members.map(m=>`<option value="${m.id}" ${f.owner===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>
+          ${c.size?inp('size','尺寸','','placeholder="130、M、US 9"'):'<span></span>'}
+        </div>
+        ${c.age?`<div class="grid2">${inp('age','適用年齡／體重','','placeholder="0–4 歲、15 kg 以下"')}${c.mfg?inp('mfgDate','製造日期','date'):''}</div>`:''}
+        ${f.sub==='汽座'?tog('accident','事故紀錄（買家一定會問）',['無','有','不確定']):''}
+      </div>
+
+      <div class="fsec"><h3>購入</h3>
+        <div class="grid2">${inp('buyDate','購入日期','date')}${inp('channel','購入途徑','','list="dl-ch" placeholder="官網、百貨專櫃"')}</div>
+        <datalist id="dl-ch">${CHANNELS.map(x=>`<option>${x}</option>`).join('')}</datalist>
+        ${c.origin?tog('origin','貨源',ORIGINS):''}
+        <div class="grid2">${inp('listPrice','原價／定價','number','inputmode="numeric" placeholder="沒折扣可空白"')}${inp('buyPrice','實付價','number','inputmode="numeric"')}</div>
+        <div class="hint" id="f-zhe" ${z?'':'hidden'}>${z?`相當於 ${z}`:''}</div>
+        ${inp('discNote','折扣說明','','placeholder="雙 11、舊機折抵、點數折抵"')}
+        <div class="grid2">${inp('warrantyEnd','保固到期日','date')}${inp('warrantyNote','保固說明','','placeholder="原廠保固可轉讓"')}</div>
+        ${tog('receipt','發票／購買證明',['有','沒有'])}
+        ${ta('buyWhy','購買原因','當初為什麼買')}
+      </div>
+
+      <div class="fsec"><h3>狀況</h3>
+        ${c.pack?tog('pack','包裝',c.pack):''}
+        ${inp('packNote',c.pack?'配件／缺件說明':'附贈內容','','placeholder="原廠電池 ×2，缺說明書"')}
+        ${tog('cond','使用狀況',CONDS)}
+        ${inp('condNote','狀況說明','','placeholder="刮痕位置、快門數、有無畫線"')}
+      </div>
+
+      <div class="fsec"><h3>出售</h3>
+        <div class="field"><span>狀態</span><div class="toggles">${ST_KEYS.map(k=>`<button data-act="ftog" data-k="status" data-v="${k}" class="${f.status===k?'on':''}">${ST[k][0]}</button>`).join('')}</div></div>
+        <div class="grid2">${inp('askPrice','預計售價','number','inputmode="numeric"')}
+          <label class="field"><span>議價</span><select id="f-priceNote" data-f="priceNote">${PRICE_NOTES.map(p=>`<option value="${p}" ${f.priceNote===p?'selected':''}>${p||'依文案設定'}</option>`).join('')}</select></label></div>
+        <div class="hint" id="f-ar" ${ar==null?'hidden':''}>${ar!=null?`約為購入價的 ${ar}%`:''}</div>
+        ${ta('sellWhy','出售原因','穿不下、換新機、閒置')}
+        ${ta('desc','補充說明（會放進文案）','買家需要知道的其他事')}
+        ${f.status==='sold'?`<div class="grid2">${inp('soldPrice','成交價','number','inputmode="numeric"')}${inp('soldDate','成交日','date')}${inp('soldFee','運費／手續費','number','inputmode="numeric"')}${inp('soldVia','成交管道')}</div>`:''}
+      </div>
+
+      <div class="sheet-actions">${f.id?`<button class="btn danger" data-act="fdel">${f.delArm?'再按一次確認刪除':'刪除'}</button>`:''}
+        <div class="right"><button class="btn" data-act="${f.id?'back':'close'}" data-id="${f.id||''}">取消</button><button class="btn primary" data-act="fok">${f.id?'儲存':'新增'}</button></div></div>`,f.id?'編輯物品':'新增物品',keep);
+  }
+
+  // ---- FB 文案 ----
+  function has(it,k){
+    switch(k){
+      case 'brand': return !!(it.brand||it.model);
+      case 'cond': return !!(it.cond||it.condNote);
+      case 'pack': return !!(it.pack||it.packNote||it.receipt==='有');
+      case 'buyDate': return isDate(it.buyDate);
+      case 'channel': return !!(it.channel||it.origin);
+      case 'list': return n0(it.listPrice)>0;
+      case 'paid': return n0(it.buyPrice)>0;
+      case 'disc': return !!(zhe(it.listPrice,it.buyPrice)||it.discNote);
+      case 'warr': return !!(isDate(it.warrantyEnd)||it.warrantyNote);
+      case 'spec': return !!(it.size||it.age||it.mfgDate||it.accident);
+      case 'buyWhy': return !!it.buyWhy;
+      case 'sellWhy': return !!it.sellWhy;
+      case 'desc': return !!it.desc;
+      case 'deal': return !!(S.settings.meet||S.settings.ship.length||S.settings.pay);
+    }
+    return false;
+  }
+  function postText(it,sel,emo){
+    const e=x=>emo?x+' ':'';
+    const on=k=>sel.has(k)&&has(it,k);
+    const L=[];
+    const nm=it.name||'', parts=[];
+    if(on('brand')&&it.brand&&!nm.includes(it.brand))parts.push(it.brand);
+    parts.push(nm);
+    if(on('brand')&&it.model&&!nm.includes(it.model))parts.push(it.model);
+    L.push(`【售】${parts.join(' ')}`);
+    const pn=it.priceNote||S.settings.priceNote;
+    L.push(`${e('💰')}售價：${n0(it.askPrice)?money(it.askPrice):'歡迎私訊出價'}${pn&&n0(it.askPrice)?`（${pn}）`:''}`);
+    if(on('list'))L.push(`${e('🏷️')}原價：${money(it.listPrice)}`);
+    const z=zhe(it.listPrice,it.buyPrice), dTxt=[on('disc')?z:'',on('disc')?it.discNote:''].filter(Boolean).join('・');
+    if(on('paid'))L.push(`${e('🧾')}購入價：${money(it.buyPrice)}${dTxt?`（${dTxt}）`:''}`);
+    else if(dTxt)L.push(`${e('🧾')}購入時：${dTxt}`);
+    const buy=[];
+    if(on('buyDate'))buy.push(`${ym(it.buyDate)}（約 ${durTxt(monthsSince(it.buyDate))}）`);
+    if(on('channel'))buy.push([it.channel,it.origin].filter(Boolean).join('・'));
+    if(buy.length)L.push(`${e('🛒')}購入：${buy.join('・')}`);
+    if(on('warr'))L.push(`${e('🛡️')}保固：${[warrTxt(it),it.warrantyNote].filter(Boolean).join('・')}`);
+    if(on('cond'))L.push(`${e('✨')}狀況：${[it.cond,it.condNote].filter(Boolean).join('・')}`);
+    if(on('pack'))L.push(`${e('📦')}包裝配件：${[it.pack,it.packNote,it.receipt==='有'?'附發票／購買證明':''].filter(Boolean).join('・')}`);
+    if(on('spec')){
+      if(it.size)L.push(`${e('📏')}尺寸：${it.size}`);
+      if(it.age)L.push(`${e('👶')}適用：${it.age}`);
+      if(it.mfgDate)L.push(`${e('🏭')}製造日期：${String(it.mfgDate).slice(0,7)}`);
+      if(it.accident)L.push(`${e('🚗')}事故紀錄：${it.accident}`);
+    }
+    if(on('buyWhy'))L.push(`${e('💡')}當初購買：${it.buyWhy}`);
+    if(on('sellWhy'))L.push(`${e('🔄')}出售原因：${it.sellWhy}`);
+    if(on('desc')){L.push(''); L.push(`${e('📝')}說明：`); L.push(it.desc);}
+    if(on('deal')){
+      const st=S.settings, way=[st.meet?`${st.meet}面交`:'',...st.ship].filter(Boolean);
+      L.push('');
+      if(way.length)L.push(`${e('📍')}交易：${way.join('／')}`);
+      if(st.pay)L.push(`${e('💳')}付款：${st.pay}`);
+    }
+    if(S.settings.footer){L.push(''); L.push(S.settings.footer);}
+    return L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  }
+  let pState=null;
+  function openPost(id){
+    const it=S.items.find(x=>x.id===id);
+    const base=it.postFields&&it.postFields.length?it.postFields:S.settings.postFields;
+    pState={id,sel:new Set(base),emoji:S.settings.emoji,copied:false};
+    pState.text=postText(it,pState.sel,pState.emoji);
+    drawPost(false);
+  }
+  function drawPost(keep=true){
+    const it=S.items.find(x=>x.id===pState.id);
+    const avail=FIELDS.filter(([k])=>has(it,k)), missing=FIELDS.filter(([k])=>!has(it,k)).map(x=>x[1]);
+    const canShare=it.photos.length&&navigator.canShare&&window.File;
+    const ask=it.status==='keep'||it.status==='consider';
+    openSheet(`<h2>FB 二手文案</h2><div class="sub">${esc(it.name)}</div>
+      <div class="field"><span>要放進文案的欄位（售價固定放；勾選會記在這件物品上）</span>
+        <div class="pick">${avail.map(([k,l])=>`<button data-act="pf" data-k="${k}" class="${pState.sel.has(k)?'on':''}" aria-pressed="${pState.sel.has(k)}">${l}</button>`).join('')}</div>
+        ${missing.length?`<div class="hint">沒有資料、不會出現：${missing.join('、')}</div>`:''}</div>
+      <label class="switch"><input type="checkbox" id="p-emo" data-act="pemo" ${pState.emoji?'checked':''}> 每行前面加表情符號</label>
+      <textarea class="post" id="p-text" aria-label="文案內容，可以直接修改">${esc(pState.text)}</textarea>
+      <div class="hint">可以直接改上面的文字再複製；改勾選會重新產生文字。照片請在 FB 發文時另外選。不會帶出家人名字或住址。</div>
+      ${pState.copied&&ask?`<div class="after"><span>已複製。貼上發文後，要改成「上架中」嗎？</span><button class="btn sm primary" data-act="plisted">改成上架中</button></div>`:''}
+      <div class="sheet-actions"><button class="btn" data-act="back" data-id="${it.id}">返回</button>
+        <div class="right">${canShare?`<button class="btn" data-act="pshare">分享照片</button>`:''}<button class="btn tagb" data-act="pcopy">複製文案</button></div></div>`,'FB 二手文案',keep);
+  }
+  async function copyText(t){
+    try{await navigator.clipboard.writeText(t); return true;}
+    catch(e){const el=document.getElementById('p-text'); if(el){el.focus(); el.select(); try{if(document.execCommand('copy'))return true;}catch(err){}} return false;}
+  }
+  async function sharePhotos(it){
+    try{
+      const files=[];
+      for(let i=0;i<it.photos.length;i++){
+        const p=it.photos[i]; let d=p.startsWith('data:')?p:(fullCache[p]||(DEMO?null:await fetchFull(p)));
+        if(!d)continue;
+        const b=await (await fetch(d)).blob();
+        files.push(new File([b],`${it.name.slice(0,20)}-${i+1}.jpg`,{type:b.type||'image/jpeg'}));
+      }
+      if(!files.length){toast('照片還沒下載完成，請稍後再試');return;}
+      if(!navigator.canShare({files})){toast('這個瀏覽器不支援分享照片');return;}
+      await navigator.share({files});
+    }catch(e){if(e&&e.name!=='AbortError')toast('分享失敗：'+(e.message||e));}
+  }
+
+  // ---- 欲購 ----
+  const safeLink=u=>/^https?:\/\//i.test(String(u||'').trim())?String(u).trim():'';
+  function openWant(id){
+    const w=S.wants.find(x=>x.id===id); if(!w)return;
+    const ro=S.offline, p=PRIOS[w.priority]||PRIOS['2'], lk=safeLink(w.link);
+    const row=(k,v,wide)=>v?`<div class="${wide?'wide':''}"><dt>${k}</dt><dd>${v}</dd></div>`:'';
+    const save=n0(w.refPrice)&&n0(w.budget)?n0(w.refPrice)-n0(w.budget):null;
+    openSheet(`
+      <div class="d-head">
+        <div class="d-title"><h2>${esc(w.name)}</h2><div class="bm">${esc((CFG[w.cat]||CFG['其他']).title)}・給${esc(ownerName(w.owner))}</div>
+          <div class="chips"><span class="prio ${p[1]}">${p[0]}</span><span class="chip c-keep">${esc(w.via)}</span></div></div>
+        ${n0(w.budget)?`<div class="ptag"><small>預算</small><b>${money(w.budget)}</b></div>`:`<div class="ptag none"><small>預算</small><b>未訂</b></div>`}
+      </div>
+      <dl class="facts">
+        ${row('新品參考價',n0(w.refPrice)?`<span class="num">${money(w.refPrice)}</span>`:'—')}
+        ${row('預算約為新品的',n0(w.refPrice)&&n0(w.budget)?`<span class="num">${Math.round(n0(w.budget)/n0(w.refPrice)*100)}%</span>${save>0?`<br><span class="hint">省 ${money(save)}</span>`:''}`:'—')}
+        ${row('加入日期',w.createdAt?`<span class="num">${esc(w.createdAt)}</span>`:'')}
+        ${row('購買方式',esc(w.via))}
+      </dl>
+      <div class="notes">
+        ${w.buyWhy?`<div class="note"><span class="lab">想買的原因（買到後會帶進物品）</span><p>${esc(w.buyWhy)}</p></div>`:''}
+        ${w.note?`<div class="note"><span class="lab">備註</span><p>${esc(w.note)}</p></div>`:''}
+        ${lk?`<div class="note"><span class="lab">參考連結</span><div class="linkbox"><a href="${esc(lk)}" target="_blank" rel="noopener noreferrer">${esc(lk)}</a></div></div>`:''}
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" data-act="close">關閉</button>
+        <div class="right">
+          <button class="btn icon" data-act="wedit" data-id="${w.id}" aria-label="編輯欲購" ${ro?'disabled':''}>${ICON.pencil}</button>
+          <button class="btn primary" data-act="wbought" data-id="${w.id}" ${ro?'disabled':''}>買到了</button>
+        </div>
+      </div>`,w.name);
+  }
+  let wState=null;
+  function openWantForm(id){
+    const w=id?S.wants.find(x=>x.id===id):null;
+    wState=w?{...w}:{...WBLANK,id:null,owner:S.owner!=='全部'?S.owner:'all',createdAt:fmt(today)};
+    drawWantForm(false);
+  }
+  function drawWantForm(keep=true){
+    const f=wState;
+    const inp=(k,lab,type,extra='')=>`<label class="field"><span>${lab}</span><input id="w-${k}" data-w="${k}" ${type?`type="${type}"`:''} value="${esc(f[k]??'')}" ${extra}></label>`;
+    openSheet(`<h2>${f.id?'編輯欲購':'新增欲購'}</h2><div class="sub">買到後按「買到了」，資料會帶進物品紀錄</div>
+      ${inp('name','想買什麼','','placeholder="例：成長型汽座、運動相機"')}
+      <div class="grid2">
+        <label class="field"><span>類別</span><select id="w-cat" data-w="cat">${CATS.map(k=>`<option value="${k}" ${f.cat===k?'selected':''}>${CFG[k].title}</option>`).join('')}</select></label>
+        <label class="field"><span>給誰用</span><select id="w-owner" data-w="owner"><option value="all" ${f.owner==='all'?'selected':''}>全家</option>${S.members.map(m=>`<option value="${m.id}" ${f.owner===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>
+        ${inp('budget','預算','number','inputmode="numeric"')}
+        ${inp('refPrice','新品參考價','number','inputmode="numeric"')}
+      </div>
+      <div class="field"><span>優先度</span><div class="toggles">${Object.entries(PRIOS).map(([k,[l]])=>`<button data-act="wtog" data-k="priority" data-v="${k}" class="${f.priority===k?'on':''}">${l}</button>`).join('')}</div></div>
+      <div class="field"><span>購買方式</span><div class="toggles">${VIAS.map(v=>`<button data-act="wtog" data-k="via" data-v="${v}" class="${f.via===v?'on':''}">${v}</button>`).join('')}</div></div>
+      <label class="field"><span>想買的原因</span><textarea id="w-buyWhy" data-w="buyWhy" rows="2">${esc(f.buyWhy)}</textarea></label>
+      <label class="field"><span>備註（找二手要注意什麼、候選型號）</span><textarea id="w-note" data-w="note" rows="2">${esc(f.note)}</textarea></label>
+      ${inp('link','參考連結','url','placeholder="https://"')}
+      <div class="sheet-actions">${f.id?`<button class="btn danger" data-act="wdel">${f.delArm?'再按一次確認刪除':'刪除'}</button>`:''}
+        <div class="right"><button class="btn" data-act="${f.id?'wopen':'close'}" data-id="${f.id||''}">取消</button><button class="btn primary" data-act="wok">${f.id?'儲存':'加入清單'}</button></div></div>`,f.id?'編輯欲購':'新增欲購',keep);
+  }
+
+  // ---- 設定 ----
+  let setState=null;
+  function openSettings(){
+    setState=JSON.parse(JSON.stringify(S.settings));
+    drawSettings(false);
+  }
+  function drawSettings(keep=true){
+    const f=setState;
+    openSheet(`<h2>交易與文案設定</h2><div class="sub">每篇 FB 文案共用。地點寫到行政區或捷運站就好，不要寫住址。</div>
+      <label class="field"><span>面交地點</span><input id="t-meet" data-t="meet" value="${esc(f.meet)}" placeholder="台中北屯、捷運文心崇德站"></label>
+      <div class="field"><span>寄送方式（可複選）</span><div class="toggles">${SHIPS.map(s=>`<button data-act="tship" data-v="${esc(s)}" class="${f.ship.includes(s)?'on':''}">${s}</button>`).join('')}</div></div>
+      <label class="field"><span>付款方式</span><input id="t-pay" data-t="pay" value="${esc(f.pay)}" placeholder="面交付現／轉帳"></label>
+      <label class="field"><span>預設議價說明</span><select id="t-priceNote" data-t="priceNote">${PRICE_NOTES.map(p=>`<option value="${p}" ${f.priceNote===p?'selected':''}>${p||'不寫'}</option>`).join('')}</select></label>
+      <label class="field"><span>結尾文字</span><textarea id="t-footer" data-t="footer" rows="2">${esc(f.footer)}</textarea></label>
+      <div class="field"><span>新物品預設放進文案的欄位</span><div class="pick">${FIELDS.map(([k,l])=>`<button data-act="tpf" data-k="${k}" class="${f.postFields.includes(k)?'on':''}" aria-pressed="${f.postFields.includes(k)}">${l}</button>`).join('')}</div></div>
+      <label class="switch"><input type="checkbox" id="t-emo" data-act="temo" ${f.emoji?'checked':''}> 預設加表情符號</label>
+      <div class="sheet-actions"><button class="btn" data-act="close">取消</button><button class="btn primary" data-act="tok" ${S.offline?'disabled':''}>儲存</button></div>`,'交易與文案設定',keep);
+  }
+
+  // ================= data layer (Google 試算表) =================
+  const DEMO=!CONFIG.API;
+  const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  S.role=DEMO?'editor':'viewer'; S.online=true; S.offline=false; S.thumbs={}; S.lastSync=0;
+  const fullCache={}, pendingThumb={};
+  const psrc=p=>!p?'':p.startsWith('data:')?(pendingThumb[p]||p):(S.thumbs[p]||'');
+  function pfull(p){
+    if(!p)return ''; if(p.startsWith('data:'))return p;
+    if(fullCache[p])return fullCache[p];
+    if(!DEMO)fetchFull(p).then(d=>{if(d)document.querySelectorAll(`img[data-pid="${p}"]`).forEach(im=>im.src=d);});
+    return S.thumbs[p]||'';
+  }
+  async function fetchFull(id){
+    try{
+      let d=await idb.get('full_'+id).catch(()=>null);
+      if(!d&&S.online){d=(await api('photo',{id})).data; idb.set('full_'+id,d).catch(()=>{});}
+      if(d)fullCache[id]=d; return d||null;
+    }catch(e){return null;}
+  }
+  function resizeImg(file,max,q){return new Promise((res,rej)=>{const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{const k=Math.min(1,max/Math.max(img.width,img.height)), c=document.createElement('canvas');
+      c.width=Math.round(img.width*k); c.height=Math.round(img.height*k); c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg',q));};
+    img.onerror=()=>{URL.revokeObjectURL(url); rej(new Error('讀不到這張照片'));}; img.src=url;});}
+
+  // 和家庭防災庫在同一個網域，所以儲存名稱要不一樣（fr- / family-resale）
+  const idb=(()=>{let p;
+    const db=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('family-resale',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);}));
+    const tx=(mode,fn)=>db().then(d=>new Promise((res,rej)=>{const t=d.transaction('kv',mode), q=fn(t.objectStore('kv')); t.oncomplete=()=>res(q&&q.result); t.onerror=()=>rej(t.error);}));
+    return {get:k=>tx('readonly',s=>s.get(k)), set:(k,v)=>tx('readwrite',s=>s.put(v,k)), clear:()=>tx('readwrite',s=>s.clear())};})();
+
+  let sess=null;
+  const SKEY='fr-session';
+  const readSession=()=>{try{return JSON.parse(localStorage.getItem(SKEY)||'null');}catch(e){return null;}};
+  const saveSession=s=>{sess=s; try{localStorage.setItem(SKEY,JSON.stringify(s));}catch(e){}};
+  const clearSession=()=>{sess=null; try{localStorage.removeItem(SKEY);}catch(e){}};
+
+  async function api(action,data={}){
+    let res;
+    try{res=await fetch(CONFIG.API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,session:sess&&sess.session,...data})});}
+    catch(e){const er=new Error('連不上伺服器'); er.code='NET'; throw er;}
+    let j; try{j=await res.json();}catch(e){const er=new Error('伺服器回應格式錯誤'); er.code='NET'; throw er;}
+    if(!j.ok){const er=new Error(j.message||j.error||'發生錯誤'); er.code=j.error; throw er;}
+    return j;
+  }
+
+  const ITEM_COLS=Object.keys(BLANK).filter(k=>k!=='photos'&&k!=='postFields').concat(['postFields','photos']);
+  const NUM_COLS=['listPrice','buyPrice','askPrice','soldPrice','soldFee'];
+  const WANT_COLS=Object.keys(WBLANK);
+  const toNum=v=>v===''||v==null?'':Number(String(v).replace(/[,\s]/g,''))||'';
+  const strRow=r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k,v==null?'':String(v)]));
+  const list=v=>String(v||'').split(',').map(x=>x.trim()).filter(Boolean);
+  function toTables(){
+    const st=S.settings;
+    const t={
+      Members:S.members.map(m=>({id:m.id,name:m.name})),
+      Items:S.items.map(it=>{const o={id:it.id}; ITEM_COLS.forEach(k=>o[k]=it[k]); o.photos=(it.photos||[]).join(','); o.postFields=(it.postFields||[]).join(','); return o;}),
+      Wishlist:S.wants.map(w=>{const o={id:w.id}; WANT_COLS.forEach(k=>o[k]=w[k]); return o;}),
+      Settings:[{id:'meet',value:st.meet},{id:'ship',value:st.ship.join(',')},{id:'pay',value:st.pay},{id:'priceNote',value:st.priceNote},
+        {id:'footer',value:st.footer},{id:'postFields',value:st.postFields.join(',')},{id:'emoji',value:st.emoji?'1':'0'}]
+    };
+    Object.keys(t).forEach(n=>t[n]=t[n].map(strRow));
+    return t;
+  }
+  function hydrate(t){
+    const T=n=>t[n]||[];
+    if(T('Members').length)S.members=T('Members').map(r=>({id:r.id,name:r.name||r.id}));
+    S.items=T('Items').map(r=>{const it={...JSON.parse(JSON.stringify(BLANK)),id:r.id};
+      ITEM_COLS.forEach(k=>{if(r[k]!=null)it[k]=r[k];});
+      NUM_COLS.forEach(k=>it[k]=it[k]===''?'':Number(String(it[k]).replace(/[,\s]/g,''))||'');
+      it.photos=list(r.photos); it.postFields=list(r.postFields);
+      if(!CFG[it.cat])it.cat='其他'; if(!ST[it.status])it.status='keep'; it.owner=it.owner||'all'; return it;});
+    S.wants=T('Wishlist').map(r=>{const w={...WBLANK,id:r.id}; WANT_COLS.forEach(k=>{if(r[k]!=null)w[k]=r[k];});
+      w.budget=toNum(w.budget); w.refPrice=toNum(w.refPrice); if(!PRIOS[w.priority])w.priority='2'; if(!VIAS.includes(w.via))w.via='都可以';
+      if(!CFG[w.cat])w.cat='其他'; w.owner=w.owner||'all'; return w;});
+    const st={meet:'',ship:[],pay:'',priceNote:'',footer:'',postFields:DEFAULT_FIELDS.slice(),emoji:true};
+    T('Settings').forEach(r=>{
+      if(r.id==='ship'||r.id==='postFields')st[r.id]=list(r.value);
+      else if(r.id==='emoji')st.emoji=r.value!=='0';
+      else if(r.id in st)st[r.id]=r.value;});
+    S.settings=st;
+    if(t.Photos)T('Photos').forEach(r=>{S.thumbs[r.id]=r.thumb;});
+  }
+  const snap=t=>Object.fromEntries(Object.entries(t).map(([n,rows])=>[n,Object.fromEntries(rows.map(r=>[r.id,JSON.stringify(r)]))]));
+  let synced=null;
+  function diff(){
+    const cur=snap(toTables()), ch={}; let n=0;
+    Object.keys(cur).forEach(name=>{
+      const before=(synced&&synced[name])||{}, up=[], del=[];
+      Object.entries(cur[name]).forEach(([id,js])=>{if(before[id]!==js)up.push(JSON.parse(js));});
+      if(name==='Items'||name==='Wishlist')Object.keys(before).forEach(id=>{if(!(id in cur[name]))del.push(id);});
+      if(up.length||del.length){ch[name]={upsert:up,del}; n+=up.length+del.length;}
+    });
+    return {ch,n,cur};
+  }
+  async function saveCache(){
+    if(DEMO)return;
+    try{await idb.set('data',{tables:toTables(),synced,lastSync:S.lastSync}); await idb.set('thumbs',S.thumbs);}catch(e){}
+  }
+
+  let syncing=false, again=false, syncTimer=null, syncErr='';
+  function scheduleSync(){
+    if(DEMO||!sess||S.role!=='editor')return;
+    saveCache(); clearTimeout(syncTimer); syncTimer=setTimeout(doSync,500); setPill();
+  }
+  async function uploadPending(){
+    for(const it of S.items){
+      for(let i=0;i<it.photos.length;i++){
+        const p=it.photos[i]; if(!p.startsWith('data:'))continue;
+        const r=await api('upload',{full:p,thumb:pendingThumb[p]||'',name:it.name});
+        S.thumbs[r.id]=pendingThumb[p]||''; fullCache[r.id]=p; idb.set('full_'+r.id,p).catch(()=>{});
+        it.photos[i]=r.id;
+      }
+    }
+  }
+  async function doSync(){
+    if(syncing){again=true;return;}
+    syncing=true; syncErr=''; setPill('同步中…');
+    try{
+      await uploadPending();
+      const {ch,n,cur}=diff();
+      if(n){await api('sync',{changes:ch}); synced=cur;}
+      S.lastSync=Date.now(); saveCache();
+    }catch(err){
+      syncErr=err.message;
+      if(err.code==='AUTH'){clearSession(); showLogin(true,'登入已過期，請重新登入。剛剛的修改還在這台手機上，登入後會自動送出。');}
+      else if(err.code==='NET'){S.online=false; applyMode(); render();}
+      else toast('同步失敗：'+err.message);
+    }finally{
+      syncing=false; setPill();
+      if(again){again=false; doSync();}
+    }
+  }
+  async function refresh(){
+    if(DEMO||!sess)return;
+    setPill('更新中…');
+    try{
+      if(synced&&diff().n&&S.role==='editor')await doSync();
+      const j=await api('load');
+      S.thumbs={}; hydrate(j.tables); synced=snap(toTables());
+      S.role=j.role; S.online=true; S.lastSync=Date.now();
+      saveCache(); applyMode(); render();
+    }catch(err){
+      if(err.code==='AUTH'){clearSession(); showLogin(true,'登入已過期，請重新登入。'); return;}
+      S.online=false; applyMode(); render();
+    }
+  }
+
+  const hm=ts=>{if(!ts)return '—'; const d=new Date(ts); const same=fmt(d)===fmt(new Date()); return (same?'今天 ':`${d.getMonth()+1}/${d.getDate()} `)+`${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+  function setPill(txt){
+    const el=document.getElementById('syncPill'); if(!el)return;
+    if(DEMO){el.textContent='範例模式';return;}
+    if(txt){el.textContent=txt;return;}
+    const pend=synced&&S.role==='editor'?diff().n:0;
+    el.textContent=!S.online?`離線・${hm(S.lastSync)}`:pend?`未同步 ${pend} 項`:`已同步・${hm(S.lastSync)}`;
+  }
+  function applyMode(){
+    if(DEMO)return;
+    S.offline=!(S.online&&S.role==='editor');
+    document.body.classList.toggle('offline',S.offline);
+    document.getElementById('offBanner').textContent=`離線中：顯示 ${hm(S.lastSync)} 的資料，不能修改。恢復網路後會自動更新。`;
+    setPill();
+  }
+
+  function loadGIS(){return new Promise((res,rej)=>{if(window.google&&google.accounts&&google.accounts.id)return res();
+    const s=document.createElement('script'); s.src='https://accounts.google.com/gsi/client'; s.async=true; s.onload=res; s.onerror=()=>rej(new Error('載入 Google 登入失敗')); document.head.appendChild(s);});}
+  async function showLogin(hasCache,msg){
+    const el=document.getElementById('login'); el.hidden=false; document.body.classList.add('locked');
+    let cache=null; if(hasCache){try{cache=await idb.get('data');}catch(e){}}
+    el.innerHTML=`<div class="login-card">
+      <div class="login-brand"><h1>家庭二手庫</h1><p>家裡值得轉賣的物品：買價、狀況、保固，一鍵變成 FB 二手文案</p></div>
+      ${msg?`<div class="login-msg">${esc(msg)}</div>`:''}
+      <section class="login-opt"><h2>使用 Google 帳號登入</h2><p>只有設定好的兩個帳號可以使用。</p><div id="gbtn" class="gbtn"><span class="hint">載入 Google 登入中…</span></div></section>
+      ${cache?`<section class="login-opt"><h2>沒有網路</h2><p>看這台手機上次存下的資料（${hm(cache.lastSync)}），不能修改。</p><button class="btn" data-act="offlineView">離線查看</button></section>`:''}
+      <div class="login-err" id="loginErr" role="alert"></div>
+    </div>`;
+    try{
+      await loadGIS();
+      google.accounts.id.initialize({client_id:CONFIG.CLIENT_ID,callback:async resp=>{
+        loginErr('驗證中…');
+        try{const r=await api('loginGoogle',{credential:resp.credential}); saveSession({session:r.session,role:r.role,name:r.name}); afterLogin();}
+        catch(err){loginErr(err.message);}
+      }});
+      const g=document.getElementById('gbtn'); g.innerHTML='';
+      google.accounts.id.renderButton(g,{theme:'outline',size:'large',text:'signin_with',shape:'pill',locale:'zh-TW',width:260});
+    }catch(err){const g=document.getElementById('gbtn'); if(g)g.innerHTML=`<span class="hint">${esc(err.message)}，請確認網路後重新整理。</span>`;}
+  }
+  const loginErr=t=>{const e=document.getElementById('loginErr'); if(e)e.textContent=t;};
+  function hideLogin(){const el=document.getElementById('login'); el.hidden=true; el.innerHTML=''; document.body.classList.remove('locked');}
+  async function afterLogin(){hideLogin(); S.role=sess.role; S.online=true; applyMode(); render(); await refresh();}
+
+  function openAccount(){
+    if(DEMO){toast('這是範例模式，資料不會儲存');return;}
+    const pend=synced&&S.role==='editor'?diff().n:0;
+    openSheet(`<h2>帳號與同步</h2>
+      <dl class="kv"><dt>身分</dt><dd>${esc(sess?sess.name:'離線查看')}</dd>
+        <dt>連線</dt><dd>${S.online?'在線':'離線'}</dd><dt>最後同步</dt><dd>${hm(S.lastSync)}</dd>
+        ${pend?`<dt>未同步</dt><dd class="c-warn">${pend} 項</dd>`:''}${syncErr?`<dt>錯誤</dt><dd class="c-warn">${esc(syncErr)}</dd>`:''}</dl>
+      <div class="hint">試算表是唯一的正本；這台手機存的是最後一次同步的副本。</div>
+      <div class="sheet-actions"><button class="btn" data-act="logout">${sess?'登出':'回登入頁'}</button>
+        <div class="right"><button class="btn" data-act="close">關閉</button><button class="btn primary" data-act="resync" ${sess?'':'disabled'}>立即同步</button></div></div>`,'帳號與同步');
+  }
+  async function logout(){
+    const pend=synced&&S.role==='editor'?diff().n:0;
+    if(pend&&S.online)await doSync();
+    try{if(sess&&S.online)await api('logout');}catch(e){}
+    clearSession(); await idb.clear().catch(()=>{}); synced=null; closeSheet(); showLogin(false);
+  }
+
+  async function boot(){
+    if(DEMO){render(); setPill(); return;}
+    S.items=[]; S.wants=[];
+    sess=readSession();
+    let cache=null; try{cache=await idb.get('data');}catch(e){}
+    if(cache){hydrate(cache.tables); synced=cache.synced; S.lastSync=cache.lastSync||0; try{Object.assign(S.thumbs,await idb.get('thumbs')||{});}catch(e){}}
+    if(!sess){render(); showLogin(!!cache); return;}
+    S.role=sess.role; S.online=navigator.onLine!==false; applyMode(); render();
+    await refresh();
+  }
+  window.addEventListener('online',()=>{if(sess)refresh();});
+  window.addEventListener('offline',()=>{if(!DEMO){S.online=false; applyMode(); render();}});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&sess&&!document.querySelector('.sheet')&&!syncing)refresh();});
+
+  // ---- events ----
+  document.addEventListener('click',e=>{
+    const b=e.target.closest('[data-act]'); if(!b)return;
+    const a=b.dataset.act;
+    if(a==='close-scrim'){ if(e.target===b)closeSheet(); return; }
+    switch(a){
+      case 'cat': S.cat=b.dataset.k; S.status=null; render(); break;
+      case 'owner': S.owner=b.dataset.k; render(); break;
+      case 'tier': S.status=S.status===b.dataset.k?null:b.dataset.k; renderTiers(); renderItems(); break;
+      case 'open': openItem(b.dataset.id); break;
+      case 'back': if(b.dataset.id)openItem(b.dataset.id); else closeSheet(); break;
+      case 'close': closeSheet(); break;
+      case 'ph': photoIdx=Number(b.dataset.i); openItem(b.dataset.id,true); break;
+      case 'add': if(S.offline)break; if(isWish())openWantForm(null); else openForm(null); break;
+      case 'view': S.view=b.dataset.k; renderSum(); break;
+      case 'prio': S.prio=S.prio===b.dataset.k?null:b.dataset.k; renderPrioTiers(); renderWishes(); break;
+      case 'wopen': if(b.dataset.id)openWant(b.dataset.id); else closeSheet(); break;
+      case 'wedit': openWantForm(b.dataset.id); break;
+      case 'wbought': {const w=S.wants.find(x=>x.id===b.dataset.id); openForm(null,w); break;}
+      case 'wtog': wState[b.dataset.k]=b.dataset.v; drawWantForm(); break;
+      case 'wdel': {if(!wState.delArm){wState.delArm=true; drawWantForm(); break;}
+        const w=S.wants.find(x=>x.id===wState.id); S.wants=S.wants.filter(x=>x.id!==wState.id); closeSheet(); render(); toast(`已移除「${w.name}」`); break;}
+      case 'wok': {const f=wState;
+        if(!f.name.trim()){toast('請填想買什麼'); document.getElementById('w-name').focus(); break;}
+        if(f.link&&!safeLink(f.link)){toast('連結要以 https:// 開頭'); break;}
+        const clean={...f,name:f.name.trim(),budget:toNum(f.budget),refPrice:toNum(f.refPrice),link:String(f.link||'').trim()}; delete clean.delArm;
+        if(f.id){const i=S.wants.findIndex(x=>x.id===f.id); S.wants[i]=clean; render(); openWant(f.id); toast('已儲存');}
+        else{clean.id=uid('W'); S.wants.push(clean); closeSheet(); render(); toast(`已加入欲購：${clean.name}`);}
+        break;}
+      case 'edit': openForm(b.dataset.id); break;
+      case 'settings': openSettings(); break;
+      case 'acct': openAccount(); break;
+      case 'logout': logout(); break;
+      case 'resync': closeSheet(); refresh(); break;
+      case 'offlineView': hideLogin(); S.role='viewer'; S.online=false; applyMode(); render(); break;
+
+      case 'st': {const it=S.items.find(x=>x.id===b.dataset.id), k=b.dataset.k; if(it.status===k)break;
+        if(k==='sold'){openSold(it.id);break;}
+        it.status=k; if(k==='listed'&&!isDate(it.listedAt))it.listedAt=fmt(today);
+        render(); openItem(it.id,true); toast(`已改成「${ST[k][0]}」`); break;}
+      case 'sok': {const it=S.items.find(x=>x.id===sState.id), f=sState;
+        if(!(n0(f.soldPrice)>0)){toast('請填成交價');break;}
+        Object.assign(it,{status:'sold',soldPrice:n0(f.soldPrice),soldDate:f.soldDate||fmt(today),soldFee:f.soldFee===''?'':n0(f.soldFee),soldVia:f.soldVia.trim()});
+        render(); openItem(it.id,true); const r=recov(it); toast(`已售出${r!=null?`，回收 ${r}%`:''}`); break;}
+
+      case 'post': openPost(b.dataset.id); break;
+      case 'pf': {const k=b.dataset.k; pState.sel.has(k)?pState.sel.delete(k):pState.sel.add(k);
+        const it=S.items.find(x=>x.id===pState.id); pState.text=postText(it,pState.sel,pState.emoji); drawPost(); break;}
+      case 'pemo': {pState.emoji=b.checked; const it=S.items.find(x=>x.id===pState.id); pState.text=postText(it,pState.sel,pState.emoji); drawPost(); break;}
+      case 'pcopy': {const it=S.items.find(x=>x.id===pState.id), t=document.getElementById('p-text').value; pState.text=t;
+        copyText(t).then(ok=>{
+          if(!ok){toast('無法自動複製：文字已選取，請長按選「拷貝」');return;}
+          const sel=FIELDS.map(x=>x[0]).filter(k=>pState.sel.has(k));
+          if(!S.offline&&sel.join(',')!==(it.postFields||[]).join(',')){it.postFields=sel; scheduleSync();}
+          pState.copied=true; drawPost(); toast('已複製，可以貼到 FB 了');});
+        break;}
+      case 'pshare': sharePhotos(S.items.find(x=>x.id===pState.id)); break;
+      case 'plisted': {const it=S.items.find(x=>x.id===pState.id); if(S.offline)break; it.status='listed'; if(!isDate(it.listedAt))it.listedAt=fmt(today);
+        render(); pState.copied=false; drawPost(); toast('已改成「上架中」'); break;}
+
+      case 'ftog': {const k=b.dataset.k, v=b.dataset.v;
+        if(k==='status'){fState.status=v; if(v==='sold'&&!fState.soldDate){fState.soldDate=fmt(today); fState.soldPrice=fState.soldPrice||fState.askPrice;} }
+        else fState[k]=fState[k]===v?'':v;
+        drawForm(); break;}
+      case 'fcover': {const i=Number(b.dataset.i); const [p]=fState.photos.splice(i,1); fState.photos.unshift(p); drawForm(); break;}
+      case 'frm': fState.photos.splice(Number(b.dataset.i),1); drawForm(); break;
+      case 'fdel': {if(!fState.delArm){fState.delArm=true; drawForm(); break;}
+        const it=S.items.find(x=>x.id===fState.id); S.items=S.items.filter(x=>x.id!==fState.id); closeSheet(); render(); toast(`已刪除「${it.name}」`); break;}
+      case 'fok': {
+        const f=fState;
+        if(!f.name.trim()){toast('請填名稱'); document.getElementById('f-name').focus(); break;}
+        if(f.status==='sold'&&!(n0(f.soldPrice)>0)){toast('已售出請填成交價'); break;}
+        const clean={...f,name:f.name.trim()}; delete clean.delArm;
+        NUM_COLS.forEach(k=>clean[k]=clean[k]===''||clean[k]==null?'':n0(clean[k]));
+        if(clean.status==='listed'&&!isDate(clean.listedAt))clean.listedAt=fmt(today);
+        if(clean.sub!=='汽座'&&!CFG[clean.cat].age)clean.accident='';
+        if(f.id){const i=S.items.findIndex(x=>x.id===f.id); S.items[i]=clean; render(); openItem(f.id); toast('已儲存');}
+        else{clean.id=uid('R'); const fw=clean.fromWant; delete clean.fromWant; S.items.push(clean);
+          if(fw){S.wants=S.wants.filter(w=>w.id!==fw); S.cat=clean.cat; S.status=null;}
+          closeSheet(); render(); toast(fw?`「${clean.name}」已移到「${CFG[clean.cat].title}」`:`已新增「${clean.name}」`);}
+        break;}
+
+      case 'tship': {const v=b.dataset.v; setState.ship=setState.ship.includes(v)?setState.ship.filter(x=>x!==v):SHIPS.filter(s=>s===v||setState.ship.includes(s)); drawSettings(); break;}
+      case 'tpf': {const k=b.dataset.k; setState.postFields=setState.postFields.includes(k)?setState.postFields.filter(x=>x!==k):FIELDS.map(x=>x[0]).filter(x=>x===k||setState.postFields.includes(x)); drawSettings(); break;}
+      case 'temo': setState.emoji=b.checked; break;
+      case 'tok': S.settings={...setState,meet:setState.meet.trim(),pay:setState.pay.trim(),footer:setState.footer.trim()}; closeSheet(); render(); toast('設定已儲存'); break;
+    }
+    if(!DEMO&&sess&&S.role==='editor'&&synced&&diff().n)scheduleSync();
+  });
+  document.addEventListener('input',e=>{
+    const t=e.target;
+    if(t.id==='q'){S.q=t.value; if(isWish()){renderPrioTiers(); renderWishes();} else {renderTiers(); renderItems();} return;}
+    if(t.dataset.w&&wState){wState[t.dataset.w]=t.value; return;}
+    if(t.dataset.t&&setState){setState[t.dataset.t]=t.value; return;}
+    if(t.dataset.s&&sState){sState[t.dataset.s]=t.value;
+      const it=S.items.find(x=>x.id===sState.id), el=document.getElementById('s-rate');
+      if(el){const r=n0(it.buyPrice)>0&&n0(sState.soldPrice)>0?Math.round((n0(sState.soldPrice)-n0(sState.soldFee))/n0(it.buyPrice)*100):null; el.textContent=r!=null?`回收率約 ${r}%`:'';}
+      return;}
+    if(t.id==='p-text'&&pState){pState.text=t.value; return;}
+    const k=t.dataset.f; if(!k||!fState)return;
+    fState[k]=t.value;
+    if(k==='cat'){fState.sub=CFG[fState.cat].subs[0]; if(!(CFG[fState.cat].pack||[]).includes(fState.pack))fState.pack=''; drawForm(); return;}
+    if(k==='sub'){drawForm(); return;}
+    if(k==='listPrice'||k==='buyPrice'){const el=document.getElementById('f-zhe'), z=zhe(fState.listPrice,fState.buyPrice); if(el){el.hidden=!z; el.textContent=z?`相當於 ${z}`:'';}}
+    if(k==='buyPrice'||k==='askPrice'){const el=document.getElementById('f-ar'), r=askRecov(fState); if(el){el.hidden=r==null; el.textContent=r!=null?`約為購入價的 ${r}%`:'';}}
+  });
+  document.addEventListener('change',e=>{
+    if(!e.target.dataset.fphoto||!e.target.files.length||!fState)return;
+    const files=[...e.target.files], st=fState;
+    (async()=>{let ok=0;
+      for(const f of files){try{const full=await resizeImg(f,1600,.82), th=await resizeImg(f,240,.65); pendingThumb[full]=th; st.photos.push(full); ok++;}catch(err){toast(err.message);}}
+      if(fState===st){drawForm(); toast(`已加入 ${ok} 張，按儲存後上傳`);}})();
+  });
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+  document.addEventListener('toggle',e=>{if(e.target.matches&&e.target.matches('details.how'))S.howOpen=e.target.open;},true);
+
+  window.__FR_TEST__={postText,zhe,durTxt,S};
+  boot();
+})();
+</script>
+<script>
+if('serviceWorker' in navigator&&location.protocol==='https:'&&/github\.io$/.test(location.hostname)){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
+</script>
+</body>
+</html>
