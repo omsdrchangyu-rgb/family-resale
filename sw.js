@@ -1,5 +1,5 @@
 // 家庭二手庫 service worker：讓沒有網路時也能打開（快取名稱和家庭防災庫分開）
-const CACHE = 'family-resale-2026.10.24-4';
+const CACHE = 'family-resale-2026.10.24-5';
 const SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
