@@ -11,9 +11,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="二手庫">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="manifest" href="manifest.webmanifest?v=2">
-<link rel="icon" href="icon-192.png?v=2">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -234,6 +234,24 @@ body.offline .fab{display:none}
 .f-photo img{width:100%;height:100%;object-fit:cover;display:block}
 .f-photo.cover{outline:2px solid var(--tag);outline-offset:1px}
 .f-photo .badge{position:absolute;left:4px;bottom:4px;font-size:11px;background:var(--tag);color:var(--tag-ink);border-radius:5px;padding:0 5px;pointer-events:none}
+
+/* 照片編輯：裁切、旋轉 */
+.f-photo .ed{position:absolute;left:4px;top:4px;font-size:10px;background:rgba(10,18,24,.6);color:#fff;border-radius:5px;padding:0 4px;pointer-events:none}
+.pe-stage{flex:0 0 auto;position:relative;margin:0 auto;max-width:100%;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden;border-radius:8px;background:#0B1419}
+.pe-stage img{display:block;width:100%;height:100%;pointer-events:none;-webkit-user-drag:none}
+.pe-box{position:absolute;outline:2px solid #fff;box-shadow:0 0 0 9999px rgba(8,16,22,.58);cursor:move;
+  background-image:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)),linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)),linear-gradient(90deg,rgba(255,255,255,.35),rgba(255,255,255,.35)),linear-gradient(90deg,rgba(255,255,255,.35),rgba(255,255,255,.35));
+  background-size:100% 1px,100% 1px,1px 100%,1px 100%;background-position:0 33.33%,0 66.66%,33.33% 0,66.66% 0;background-repeat:no-repeat}
+.pe-box i{position:absolute;width:34px;height:34px}
+.pe-box i::after{content:"";position:absolute;width:18px;height:18px;border:0 solid #fff}
+.pe-box i[data-h="nw"]{left:-10px;top:-10px;cursor:nwse-resize} .pe-box i[data-h="nw"]::after{left:8px;top:8px;border-left-width:4px;border-top-width:4px}
+.pe-box i[data-h="ne"]{right:-10px;top:-10px;cursor:nesw-resize} .pe-box i[data-h="ne"]::after{right:8px;top:8px;border-right-width:4px;border-top-width:4px}
+.pe-box i[data-h="sw"]{left:-10px;bottom:-10px;cursor:nesw-resize} .pe-box i[data-h="sw"]::after{left:8px;bottom:8px;border-left-width:4px;border-bottom-width:4px}
+.pe-box i[data-h="se"]{right:-10px;bottom:-10px;cursor:nwse-resize} .pe-box i[data-h="se"]::after{right:8px;bottom:8px;border-right-width:4px;border-bottom-width:4px}
+.pe-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pe-tools .btn{display:flex;align-items:center;justify-content:center;gap:5px}
+.pe-tools svg{width:17px;height:17px}
+.pe-size{font-size:12px;color:var(--muted);text-align:center;margin-top:-8px;font-family:var(--font-num)}
 .f-photo .rm{position:absolute;right:3px;top:3px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(10,18,14,.65);color:#fff;font-size:13px;line-height:22px;padding:0}
 .f-add{aspect-ratio:1;max-width:100%;border-radius:10px;border:1px dashed var(--line);display:grid;place-items:center;text-align:center;font-size:12px;color:var(--muted);cursor:pointer;background:var(--surface-2)}
 .f-add input{display:none}
@@ -552,7 +570,7 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
     const main=it.photos[photoIdx];
     const side=it.photos.length>1
       ?`<div class="d-thumbs">${it.photos.map((p,i)=>`<button data-act="ph" data-id="${it.id}" data-i="${i}" class="${i===photoIdx?'on':''}" aria-label="第 ${i+1} 張照片"><img src="${psrc(p)}" alt=""></button>`).join('')}</div>`
-      :`<div class="hint">${it.photos.length?'只有 1 張照片。':'還沒有照片。'}${ro?'':'在編輯裡可以加照片。上架前建議拍正面、背面、瑕疵處和配件全貌。'}</div>`;
+      :`<div class="hint">${it.photos.length?'只有 1 張照片。':'還沒有照片。'}${ro?'':'在編輯裡可以加照片、裁切、旋轉。上架前建議拍正面、背面、瑕疵處和配件全貌。'}</div>`;
     const tag=sold?`<div class="ptag sold"><small>成交</small><b>${money(it.soldPrice)}</b></div>`
       :n0(it.askPrice)?`<div class="ptag"><small>預計售價</small><b>${money(it.askPrice)}</b></div>`:`<div class="ptag none"><small>預計售價</small><b>未定價</b></div>`;
     const row=(k,v,wide)=>v?`<div class="${wide?'wide':''}"><dt>${k}</dt><dd>${v}</dd></div>`:'';
@@ -640,8 +658,8 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
     const tog=(k,lab,opts,allowNone=true)=>`<div class="field"><span>${lab}</span><div class="toggles">${opts.map(o=>`<button data-act="ftog" data-k="${k}" data-v="${esc(o)}" class="${f[k]===o?'on':''}">${esc(o)}</button>`).join('')}</div></div>`;
     const z=zhe(f.listPrice,f.buyPrice), ar=askRecov(f);
     openSheet(`<h2>${f.id?'編輯物品':f.fromWant?'買到了：補上資料':'新增物品'}</h2><div class="sub">${f.id?esc(f.name):f.fromWant?'填好實付價和購入途徑，儲存後會從欲購清單移到物品裡':'先填名稱和價格，其他之後再補也可以'}</div>
-      <div class="field"><span>照片（點一張設為封面）</span>
-        <div class="f-photos">${f.photos.map((p,i)=>`<div class="f-photo ${i===0?'cover':''}"><button class="pick" data-act="fcover" data-i="${i}" aria-label="設為封面"><img src="${psrc(p)}" alt=""></button>${i===0?'<span class="badge">封面</span>':''}<button class="rm" data-act="frm" data-i="${i}" aria-label="移除照片">✕</button></div>`).join('')}
+      <div class="field"><span>照片（點照片可以裁切、旋轉、設為封面）</span>
+        <div class="f-photos">${f.photos.map((p,i)=>`<div class="f-photo ${i===0?'cover':''}"><button class="pick" data-act="fedit" data-i="${i}" aria-label="編輯第 ${i+1} 張照片"><img src="${psrc(p)}" alt=""></button>${i===0?'<span class="badge">封面</span>':''}${p.startsWith('data:')&&editedPh.has(p)?'<span class="ed">已編輯</span>':''}<button class="rm" data-act="frm" data-i="${i}" aria-label="移除照片">✕</button></div>`).join('')}
           <label class="f-add" for="f-files">＋<br>加照片<input type="file" id="f-files" accept="image/*" multiple data-fphoto="1"></label></div></div>
 
       <div class="fsec"><h3>基本</h3>
@@ -872,6 +890,122 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
       <div class="sheet-actions"><button class="btn" data-act="close">取消</button><button class="btn primary" data-act="tok" ${S.offline?'disabled':''}>儲存</button></div>`,'交易與文案設定',keep);
   }
 
+
+  // ================= 照片編輯（裁切、旋轉） =================
+  const editedPh=new Set();
+  let eState=null, drag=null;
+  const loadImg=src=>new Promise((res,rej)=>{const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error('讀不到這張照片')); im.src=src;});
+  function rotCanvas(img,rot,max){
+    const iw=img.naturalWidth, ih=img.naturalHeight, side=rot%180!==0, sw=side?ih:iw, sh=side?iw:ih;
+    const k=Math.min(1,max/Math.max(sw,sh)), c=document.createElement('canvas');
+    c.width=Math.round(sw*k); c.height=Math.round(sh*k);
+    const g=c.getContext('2d'); g.imageSmoothingQuality='high';
+    g.translate(c.width/2,c.height/2); g.rotate(rot*Math.PI/180); g.drawImage(img,-iw*k/2,-ih*k/2,iw*k,ih*k);
+    return c;
+  }
+  function shrink(src,sx,sy,sw,sh,max,q){
+    const k=Math.min(1,max/Math.max(sw,sh)), c=document.createElement('canvas');
+    c.width=Math.max(1,Math.round(sw*k)); c.height=Math.max(1,Math.round(sh*k));
+    const g=c.getContext('2d'); g.imageSmoothingQuality='high'; g.drawImage(src,sx,sy,sw,sh,0,0,c.width,c.height);
+    return c.toDataURL('image/jpeg',q);
+  }
+  async function openPhotoEdit(i){
+    const p=fState.photos[i];
+    let src=p.startsWith('data:')?p:(fullCache[p]||(DEMO?null:await fetchFull(p)));
+    if(!src){toast('照片原檔還沒下載，請確認網路後再試');return;}
+    try{
+      const img=await loadImg(src);
+      eState={i,img,rot:0,ratio:0,cover:i===0,crop:{x:0,y:0,w:1,h:1}};
+      buildPreview(); drawPhotoEdit(false);
+    }catch(err){toast(err.message);}
+  }
+  function buildPreview(){
+    const c=rotCanvas(eState.img,eState.rot,1000);
+    eState.pw=c.width; eState.ph=c.height; eState.prev=c.toDataURL('image/jpeg',.85);
+  }
+  function resetCrop(){
+    const e=eState;
+    if(!e.ratio){e.crop={x:0,y:0,w:1,h:1};return;}
+    const rn=e.ratio*e.ph/e.pw;               // 裁切框的寬高比（以 0–1 座標表示）
+    const w=rn>=1?1:rn, h=rn>=1?1/rn:1;
+    e.crop={x:(1-w)/2,y:(1-h)/2,w,h};
+  }
+  const RATIOS=[[0,'自由'],[1,'1:1'],[4/3,'4:3'],[3/4,'3:4']];
+  const ROT_L='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4v6h6"/><path d="M3.5 13.5A8.5 8.5 0 1 0 6 6.2L3 10"/></svg>';
+  const ROT_R='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 4v6h-6"/><path d="M20.5 13.5A8.5 8.5 0 1 1 18 6.2L21 10"/></svg>';
+  function drawPhotoEdit(keep=true){
+    const e=eState, n=fState.photos.length;
+    openSheet(`<h2>編輯照片</h2><div class="sub">第 ${e.i+1} 張，共 ${n} 張。拖動四個角調整裁切範圍，拖動框內可以移動。</div>
+      <div class="pe-stage" id="peStage"><img src="${e.prev}" alt="" draggable="false">
+        <div class="pe-box" id="peBox" data-h="move"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div>
+      <div class="pe-size" id="peSize"></div>
+      <div class="pe-tools">
+        <button class="btn" data-act="perot" data-d="-90">${ROT_L}左轉</button>
+        <button class="btn" data-act="perot" data-d="90">${ROT_R}右轉</button>
+        <button class="btn" data-act="pereset">還原</button></div>
+      <div class="field"><span>裁切比例</span><div class="toggles">${RATIOS.map(([r,l])=>`<button data-act="peratio" data-r="${r}" class="${e.ratio===r?'on':''}">${l}</button>`).join('')}</div></div>
+      ${n>1?`<label class="switch"><input type="checkbox" data-act="pecover" ${e.cover?'checked':''} ${e.i===0?'disabled':''}> ${e.i===0?'這張是封面':'設為封面（列表與 FB 分享的第一張）'}</label>`:''}
+      <div class="sheet-actions"><button class="btn" data-act="pecancel">取消</button><button class="btn primary" data-act="pedone">完成</button></div>`,'編輯照片',keep);
+    sizeStage(); placeBox();
+  }
+  function sizeStage(){
+    const st=document.getElementById('peStage'); if(!st)return;
+    const sheet=st.closest('.sheet'), cs=getComputedStyle(sheet);
+    const availW=sheet.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+    const maxH=Math.max(220,(window.visualViewport?window.visualViewport.height:window.innerHeight)*0.5);
+    const k=Math.min(availW/eState.pw,maxH/eState.ph);
+    st.style.width=Math.floor(eState.pw*k)+'px'; st.style.height=Math.floor(eState.ph*k)+'px';
+  }
+  function placeBox(){
+    const b=document.getElementById('peBox'); if(!b)return; const c=eState.crop;
+    Object.assign(b.style,{left:c.x*100+'%',top:c.y*100+'%',width:c.w*100+'%',height:c.h*100+'%'});
+    const iw=eState.img.naturalWidth, ih=eState.img.naturalHeight, side=eState.rot%180!==0, sw=side?ih:iw, sh=side?iw:ih;
+    const el=document.getElementById('peSize'); if(el)el.textContent=`${Math.round(c.w*sw)} × ${Math.round(c.h*sh)}${eState.rot?`・已旋轉 ${eState.rot}°`:''}`;
+  }
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+  function dragRect(d,dx,dy){
+    const c=d.c, MIN=0.1;
+    if(d.h==='move')return {x:clamp(c.x+dx,0,1-c.w),y:clamp(c.y+dy,0,1-c.h),w:c.w,h:c.h};
+    const W=d.h.includes('w'), N=d.h.includes('n');
+    const ax=W?c.x+c.w:c.x, ay=N?c.y+c.h:c.y;                 // 對角固定
+    const px=clamp((W?c.x:c.x+c.w)+dx,0,1), py=clamp((N?c.y:c.y+c.h)+dy,0,1);
+    const maxW=W?ax:1-ax, maxH=N?ay:1-ay;
+    let w=clamp(Math.abs(px-ax),Math.min(MIN,maxW),maxW), h=clamp(Math.abs(py-ay),Math.min(MIN,maxH),maxH);
+    if(eState.ratio){
+      const r=eState.ratio*d.H/d.W;
+      if(w/h>r)w=h*r; else h=w/r;
+      if(w>maxW){w=maxW;h=w/r;} if(h>maxH){h=maxH;w=h*r;}
+    }
+    return {x:W?ax-w:ax,y:N?ay-h:ay,w,h};
+  }
+  document.addEventListener('pointerdown',ev=>{
+    const h=ev.target.closest&&ev.target.closest('#peStage [data-h]'); if(!h||!eState)return;
+    ev.preventDefault();
+    const st=document.getElementById('peStage').getBoundingClientRect();
+    drag={h:h.dataset.h,x0:ev.clientX,y0:ev.clientY,W:st.width,H:st.height,c:{...eState.crop}};
+    try{h.setPointerCapture(ev.pointerId);}catch(err){}
+  });
+  document.addEventListener('pointermove',ev=>{
+    if(!drag||!eState)return; ev.preventDefault();
+    eState.crop=dragRect(drag,(ev.clientX-drag.x0)/drag.W,(ev.clientY-drag.y0)/drag.H); placeBox();
+  },{passive:false});
+  const endDrag=()=>{drag=null;};
+  document.addEventListener('pointerup',endDrag); document.addEventListener('pointercancel',endDrag);
+  window.addEventListener('resize',()=>{if(eState&&document.getElementById('peStage')){sizeStage();}});
+  function applyPhotoEdit(){
+    const e=eState, c=e.crop, full=e.crop.w>0.999&&e.crop.h>0.999&&!e.rot;
+    let i=e.i;
+    if(!full){
+      const rc=rotCanvas(e.img,e.rot,4096);
+      const sx=Math.round(c.x*rc.width), sy=Math.round(c.y*rc.height), sw=Math.max(1,Math.round(c.w*rc.width)), sh=Math.max(1,Math.round(c.h*rc.height));
+      const big=shrink(rc,sx,sy,sw,sh,1600,.85), th=shrink(rc,sx,sy,sw,sh,240,.7);
+      pendingThumb[big]=th; editedPh.add(big); fState.photos[i]=big;
+    }
+    if(e.cover&&i>0){const [p]=fState.photos.splice(i,1); fState.photos.unshift(p);}
+    eState=null; drawForm(false);
+    toast(full?(e.cover&&i>0?'已設為封面':'沒有變更'):'已套用，按「儲存」後上傳');
+  }
+
   // ================= data layer (Google 試算表) =================
   const DEMO=!CONFIG.API;
   const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -1099,14 +1233,14 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
   document.addEventListener('click',e=>{
     const b=e.target.closest('[data-act]'); if(!b)return;
     const a=b.dataset.act;
-    if(a==='close-scrim'){ if(e.target===b)closeSheet(); return; }
+    if(a==='close-scrim'){ if(e.target===b){ if(eState){eState=null; drawForm(false);} else closeSheet(); } return; }
     switch(a){
       case 'cat': S.cat=b.dataset.k; S.status=null; render(); break;
       case 'owner': S.owner=b.dataset.k; render(); break;
       case 'tier': S.status=S.status===b.dataset.k?null:b.dataset.k; renderTiers(); renderItems(); break;
       case 'open': openItem(b.dataset.id); break;
       case 'back': if(b.dataset.id)openItem(b.dataset.id); else closeSheet(); break;
-      case 'close': closeSheet(); break;
+      case 'close': if(eState){eState=null; drawForm(false);} else closeSheet(); break;
       case 'ph': photoIdx=Number(b.dataset.i); openItem(b.dataset.id,true); break;
       case 'add': if(S.offline)break; if(isWish())openWantForm(null); else openForm(null); break;
       case 'view': S.view=b.dataset.k; renderSum(); break;
@@ -1159,7 +1293,13 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0}
         if(k==='status'){fState.status=v; if(v==='sold'&&!fState.soldDate){fState.soldDate=fmt(today); fState.soldPrice=fState.soldPrice||fState.askPrice;} }
         else fState[k]=fState[k]===v?'':v;
         drawForm(); break;}
-      case 'fcover': {const i=Number(b.dataset.i); const [p]=fState.photos.splice(i,1); fState.photos.unshift(p); drawForm(); break;}
+      case 'fedit': openPhotoEdit(Number(b.dataset.i)); break;
+      case 'perot': {eState.rot=(eState.rot+Number(b.dataset.d)+360)%360; buildPreview(); resetCrop(); drawPhotoEdit(); break;}
+      case 'peratio': {eState.ratio=Number(b.dataset.r); resetCrop(); drawPhotoEdit(); break;}
+      case 'pereset': {eState.rot=0; eState.ratio=0; buildPreview(); resetCrop(); drawPhotoEdit(); break;}
+      case 'pecover': eState.cover=!eState.cover; drawPhotoEdit(); break;
+      case 'pecancel': eState=null; drawForm(false); break;
+      case 'pedone': applyPhotoEdit(); break;
       case 'frm': fState.photos.splice(Number(b.dataset.i),1); drawForm(); break;
       case 'fdel': {if(!fState.delArm){fState.delArm=true; drawForm(); break;}
         const it=S.items.find(x=>x.id===fState.id); S.items=S.items.filter(x=>x.id!==fState.id); closeSheet(); render(); toast(`已刪除「${it.name}」`); break;}
